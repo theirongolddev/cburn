@@ -1,0 +1,44 @@
+version: "2"
+
+linters:
+  enable:
+    - gosec          # security checks
+    - revive         # style & correctness (golint successor)
+    - gocritic       # bugs, performance, style
+    - unconvert      # unnecessary type conversions
+    - unparam        # unused function parameters
+    - misspell       # typos in comments/strings
+    - errcheck       # unchecked errors (on by default, being explicit)
+    - govet          # suspicious constructs (on by default)
+    - staticcheck    # deep static analysis (on by default)
+    - ineffassign    # unused assignments (on by default)
+    - unused         # unused code (on by default)
+    - nilerr         # returning nil when error is non-nil
+    - perfsprint     # faster fmt.Sprintf alternatives
+    - prealloc       # slice pre-allocation hints
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: true  # don't require doc comments on every export
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - ifElseChain    # sometimes clearer than switch
+  gosec:
+    excludes:
+      - G104  # don't flag deferred .Close() unchecked errors
+  funlen:
+    lines: 80
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+output:
+  sort-order:
+    - file

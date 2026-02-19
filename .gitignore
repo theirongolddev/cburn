@@ -5,5 +5,8 @@ cburn
 .idea/
 .vscode/
 
+# Test artifacts
+pipeline.test
+
 # OS
 .DS_Store
