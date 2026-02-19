@@ -1,0 +1,37 @@
+package cmd
+
+import (
+	"fmt"
+
+	"cburn/internal/config"
+	"cburn/internal/tui"
+	"cburn/internal/tui/theme"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+)
+
+var tuiCmd = &cobra.Command{
+	Use:   "tui",
+	Short: "Launch interactive TUI dashboard",
+	RunE:  runTUI,
+}
+
+func init() {
+	rootCmd.AddCommand(tuiCmd)
+}
+
+func runTUI(_ *cobra.Command, _ []string) error {
+	// Load config for theme
+	cfg, _ := config.Load()
+	theme.SetActive(cfg.Appearance.Theme)
+
+	app := tui.NewApp(flagDataDir, flagDays, flagProject, flagModel, !flagNoSubagents)
+	p := tea.NewProgram(app, tea.WithAltScreen())
+
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	return nil
+}
