@@ -97,6 +97,17 @@ func AggregateDays(sessions []model.SessionStats, since, until time.Time) []mode
 		ds.EstimatedCost += s.EstimatedCost
 	}
 
+	// Fill in every day in the range so the chart shows gaps as zeros
+	day := since.Local().Truncate(24 * time.Hour)
+	end := until.Local().Truncate(24 * time.Hour)
+	for !day.After(end) {
+		dayKey := day.Format("2006-01-02")
+		if _, ok := dayMap[dayKey]; !ok {
+			dayMap[dayKey] = &model.DailyStats{Date: day}
+		}
+		day = day.AddDate(0, 0, 1)
+	}
+
 	// Convert to sorted slice (most recent first)
 	days := make([]model.DailyStats, 0, len(dayMap))
 	for _, ds := range dayMap {
