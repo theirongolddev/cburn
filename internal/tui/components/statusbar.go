@@ -9,21 +9,17 @@ import (
 )
 
 // RenderStatusBar renders the bottom status bar.
-func RenderStatusBar(width int, filterInfo string, dataAge string) string {
+func RenderStatusBar(width int, dataAge string) string {
 	t := theme.Active
 
 	style := lipgloss.NewStyle().
 		Foreground(t.TextMuted).
 		Width(width)
 
-	left := " [f]ilter  [?]help  [q]uit"
+	left := " [?]help  [q]uit"
 	right := ""
 	if dataAge != "" {
 		right = fmt.Sprintf("Data: %s ", dataAge)
-	}
-
-	if filterInfo != "" {
-		left += "  " + filterInfo
 	}
 
 	// Pad middle

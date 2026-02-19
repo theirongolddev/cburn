@@ -70,7 +70,13 @@ func RenderTabBar(activeIdx int, width int) string {
 		parts = append(parts, rendered)
 	}
 
-	// Split into two rows if needed
+	// Single row if all tabs fit
+	full := " " + strings.Join(parts, "  ")
+	if lipgloss.Width(full) <= width {
+		return full
+	}
+
+	// Fall back to two rows
 	row1 := strings.Join(parts[:5], "  ")
 	row2 := strings.Join(parts[5:], "  ")
 
