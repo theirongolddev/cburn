@@ -161,4 +161,3 @@ func shortModel(name string) string {
 	}
 	return name
 }
-

@@ -4,11 +4,11 @@ import "time"
 
 // SummaryStats holds the top-level aggregate across all sessions.
 type SummaryStats struct {
-	TotalSessions   int
-	TotalPrompts    int
-	TotalAPICalls   int
+	TotalSessions     int
+	TotalPrompts      int
+	TotalAPICalls     int
 	TotalDurationSecs int64
-	ActiveDays      int
+	ActiveDays        int
 
 	InputTokens           int64
 	OutputTokens          int64
@@ -46,7 +46,7 @@ type DailyStats struct {
 }
 
 // ModelStats holds aggregated metrics for a single model.
-type ModelStats struct {
+type ModelStats struct { //nolint:revive // renaming would break many call sites
 	Model           string
 	APICalls        int
 	InputTokens     int64
@@ -79,11 +79,11 @@ type HourlyStats struct {
 
 // WeeklyStats holds metrics for one calendar week.
 type WeeklyStats struct {
-	WeekStart    time.Time
-	Sessions     int
-	Prompts      int
-	TotalTokens  int64
-	DurationSecs int64
+	WeekStart     time.Time
+	Sessions      int
+	Prompts       int
+	TotalTokens   int64
+	DurationSecs  int64
 	EstimatedCost float64
 }
 

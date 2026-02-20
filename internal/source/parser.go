@@ -1,3 +1,4 @@
+// Package source discovers and parses Claude Code JSONL session files.
 package source
 
 import (
@@ -41,7 +42,7 @@ func ParseFile(df DiscoveredFile) ParseResult {
 	if err != nil {
 		return ParseResult{Err: err}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	calls := make(map[string]*model.APICall)
 
@@ -274,14 +275,17 @@ func classifyType(line []byte, pos int) (val string, isKey bool) {
 }
 
 // skipJSONString advances past a JSON string starting at the opening quote.
+//
+//nolint:gosec // manual bounds checking throughout
 func skipJSONString(line []byte, i int) int {
 	i++ // skip opening quote
 	for i < len(line) {
-		if line[i] == '\\' {
+		switch line[i] {
+		case '\\':
 			i += 2
-		} else if line[i] == '"' {
+		case '"':
 			return i + 1
-		} else {
+		default:
 			i++
 		}
 	}

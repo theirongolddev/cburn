@@ -1,3 +1,4 @@
+// Package store provides a SQLite-backed cache for parsed session data.
 package store
 
 import (
@@ -9,7 +10,7 @@ import (
 
 	"cburn/internal/model"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // register sqlite driver
 )
 
 // Cache provides SQLite-backed session caching.
@@ -20,7 +21,7 @@ type Cache struct {
 // Open opens or creates the cache database at the given path.
 func Open(dbPath string) (*Cache, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating cache dir: %w", err)
 	}
 
@@ -30,7 +31,7 @@ func Open(dbPath string) (*Cache, error) {
 	}
 
 	if _, err := db.Exec(schemaSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("creating schema: %w", err)
 	}
 
@@ -54,7 +55,7 @@ func (c *Cache) GetTrackedFiles() (map[string]FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]FileInfo)
 	for rows.Next() {
@@ -74,7 +75,7 @@ func (c *Cache) SaveSession(s model.SessionStats, mtimeNs, sizeBytes int64) erro
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	startTime := ""
@@ -147,7 +148,7 @@ func (c *Cache) LoadAllSessions() ([]model.SessionStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var sessions []model.SessionStats
 	for rows.Next() {
@@ -195,7 +196,7 @@ func (c *Cache) LoadAllSessions() ([]model.SessionStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer modelRows.Close()
+	defer func() { _ = modelRows.Close() }()
 
 	// Build session index for fast lookup
 	sessionIdx := make(map[string]int)

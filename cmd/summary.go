@@ -51,7 +51,7 @@ func runSummary(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Build the summary table
-	rows := [][]string{
+	rows := [][]string{ //nolint:prealloc // appended conditionally below
 		{"Sessions", cli.FormatNumber(int64(stats.TotalSessions))},
 		{"Prompts", cli.FormatNumber(int64(stats.TotalPrompts))},
 		{"Total Time", cli.FormatDuration(stats.TotalDurationSecs)},
@@ -70,7 +70,7 @@ func runSummary(_ *cobra.Command, _ []string) error {
 	}
 
 	// Cost per day with delta
-	costDayStr := fmt.Sprintf("%s/day", cli.FormatCost(stats.CostPerDay))
+	costDayStr := cli.FormatCost(stats.CostPerDay) + "/day"
 	if prevStats.CostPerDay > 0 {
 		costDayStr += fmt.Sprintf("  (%s vs prev %dd)",
 			cli.FormatDelta(stats.CostPerDay, prevStats.CostPerDay), flagDays)

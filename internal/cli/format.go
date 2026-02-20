@@ -1,8 +1,10 @@
+// Package cli provides formatting and rendering utilities for terminal output.
 package cli
 
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -22,14 +24,14 @@ func FormatTokens(n int64) string {
 	case abs >= 1_000:
 		return fmt.Sprintf("%.1fK", float64(n)/1_000)
 	default:
-		return fmt.Sprintf("%d", n)
+		return strconv.FormatInt(n, 10)
 	}
 }
 
 // FormatCost formats a USD cost value.
 func FormatCost(cost float64) string {
 	if cost >= 1000 {
-		return fmt.Sprintf("$%s", FormatNumber(int64(math.Round(cost))))
+		return "$" + FormatNumber(int64(math.Round(cost)))
 	}
 	if cost >= 100 {
 		return fmt.Sprintf("$%.0f", cost)
@@ -66,7 +68,7 @@ func FormatNumber(n int64) string {
 		return "-" + FormatNumber(-n)
 	}
 
-	s := fmt.Sprintf("%d", n)
+	s := strconv.FormatInt(n, 10)
 	if len(s) <= 3 {
 		return s
 	}
@@ -95,9 +97,9 @@ func FormatPercent(f float64) string {
 func FormatDelta(current, previous float64) string {
 	delta := current - previous
 	if delta >= 0 {
-		return fmt.Sprintf("+%s", FormatCost(delta))
+		return "+" + FormatCost(delta)
 	}
-	return fmt.Sprintf("-%s", FormatCost(-delta))
+	return "-" + FormatCost(-delta)
 }
 
 // FormatDayOfWeek returns a 3-letter day abbreviation from a weekday number.

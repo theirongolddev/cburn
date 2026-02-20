@@ -67,11 +67,6 @@ func Load(claudeDir string, includeSubagents bool, progressFn ProgressFunc) (*Lo
 		numWorkers = len(toProcess)
 	}
 
-	type indexedResult struct {
-		idx    int
-		result source.ParseResult
-	}
-
 	work := make(chan int, len(toProcess))
 	results := make([]source.ParseResult, len(toProcess))
 	var wg sync.WaitGroup

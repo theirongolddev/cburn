@@ -26,7 +26,7 @@ func ScanDir(claudeDir string) ([]DiscoveredFile, error) {
 
 	err = filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip unreadable entries
+			return nil //nolint:nilerr // intentionally skip unreadable entries
 		}
 		if d.IsDir() {
 			return nil
@@ -77,8 +77,9 @@ func ScanDir(claudeDir string) ([]DiscoveredFile, error) {
 
 // decodeProjectName extracts a human-readable project name from the encoded directory name.
 // Claude Code encodes absolute paths by replacing "/" with "-", so:
-//   "-Users-tayloreernisse-projects-gitlore" -> "gitlore"
-//   "-Users-tayloreernisse-projects-my-cool-project" -> "my-cool-project"
+//
+//	"-Users-tayloreernisse-projects-gitlore" -> "gitlore"
+//	"-Users-tayloreernisse-projects-my-cool-project" -> "my-cool-project"
 //
 // We find the last known path component ("projects", "repos", "src", "code", "home")
 // and take everything after it. Falls back to the last non-empty segment.

@@ -79,7 +79,7 @@ func BenchmarkLoadWithCache(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer cache.Close()
+	defer func() { _ = cache.Close() }()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -15,7 +15,7 @@ type PlanInfo struct {
 // DetectPlan reads ~/.claude/.claude.json to determine the billing plan.
 func DetectPlan(claudeDir string) PlanInfo {
 	path := filepath.Join(claudeDir, ".claude.json")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from known claudeDir
 	if err != nil {
 		return PlanInfo{PlanCeiling: 200} // default to Max plan
 	}

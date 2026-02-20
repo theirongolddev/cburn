@@ -1,3 +1,4 @@
+// Package pipeline orchestrates session loading, caching, and metric aggregation.
 package pipeline
 
 import (

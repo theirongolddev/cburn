@@ -76,7 +76,7 @@ func loadData() (*pipeline.LoadResult, error) {
 				fmt.Fprintf(os.Stderr, "  Cache unavailable, doing full parse\n")
 			}
 		} else {
-			defer cache.Close()
+			defer func() { _ = cache.Close() }()
 
 			cr, err := pipeline.LoadWithCache(flagDataDir, !flagNoSubagents, cache, progressFn)
 			if err != nil {

@@ -1,3 +1,4 @@
+// Package model defines domain types for cburn metrics and sessions.
 package model
 
 import "time"
@@ -17,7 +18,7 @@ type APICall struct {
 }
 
 // ModelUsage tracks per-model token usage within a session.
-type ModelUsage struct {
+type ModelUsage struct { //nolint:revive // renaming would break many call sites
 	APICalls              int
 	InputTokens           int64
 	OutputTokens          int64
