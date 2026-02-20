@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"cburn/internal/cli"
@@ -16,6 +17,7 @@ import (
 
 const (
 	settingsFieldAPIKey = iota
+	settingsFieldSessionKey
 	settingsFieldTheme
 	settingsFieldDays
 	settingsFieldBudget
@@ -56,13 +58,21 @@ func (a App) settingsStartEdit() (tea.Model, tea.Cmd) {
 		if existing != "" {
 			ti.SetValue(existing)
 		}
+	case settingsFieldSessionKey:
+		ti.Placeholder = "sk-ant-sid..."
+		ti.EchoMode = textinput.EchoPassword
+		ti.EchoCharacter = '*'
+		existing := config.GetSessionKey(cfg)
+		if existing != "" {
+			ti.SetValue(existing)
+		}
 	case settingsFieldTheme:
 		ti.Placeholder = "flexoki-dark, catppuccin-mocha, tokyo-night, terminal"
 		ti.SetValue(cfg.Appearance.Theme)
 		ti.EchoMode = textinput.EchoNormal
 	case settingsFieldDays:
 		ti.Placeholder = "30"
-		ti.SetValue(fmt.Sprintf("%d", cfg.General.DefaultDays))
+		ti.SetValue(strconv.Itoa(cfg.General.DefaultDays))
 		ti.EchoMode = textinput.EchoNormal
 	case settingsFieldBudget:
 		ti.Placeholder = "500 (monthly USD, leave empty to clear)"
@@ -103,6 +113,8 @@ func (a *App) settingsSave() {
 	switch a.settings.cursor {
 	case settingsFieldAPIKey:
 		cfg.AdminAPI.APIKey = val
+	case settingsFieldSessionKey:
+		cfg.ClaudeAI.SessionKey = val
 	case settingsFieldTheme:
 		// Validate theme name
 		found := false
@@ -162,10 +174,21 @@ func (a App) renderSettingsTab(cw int) string {
 		}
 	}
 
+	sessionKeyDisplay := "(not set)"
+	existingSession := config.GetSessionKey(cfg)
+	if existingSession != "" {
+		if len(existingSession) > 16 {
+			sessionKeyDisplay = existingSession[:12] + "..." + existingSession[len(existingSession)-4:]
+		} else {
+			sessionKeyDisplay = "****"
+		}
+	}
+
 	fields := []field{
 		{"Admin API Key", apiKeyDisplay},
+		{"Session Key", sessionKeyDisplay},
 		{"Theme", cfg.Appearance.Theme},
-		{"Default Days", fmt.Sprintf("%d", cfg.General.DefaultDays)},
+		{"Default Days", strconv.Itoa(cfg.General.DefaultDays)},
 		{"Monthly Budget", func() string {
 			if cfg.Budget.MonthlyUSD != nil {
 				return fmt.Sprintf("$%.0f", *cfg.Budget.MonthlyUSD)
@@ -210,7 +233,7 @@ func (a App) renderSettingsTab(cw int) string {
 	infoBody.WriteString(labelStyle.Render("Data directory:  ") + valueStyle.Render(a.claudeDir) + "\n")
 	infoBody.WriteString(labelStyle.Render("Sessions loaded: ") + valueStyle.Render(cli.FormatNumber(int64(len(a.sessions)))) + "\n")
 	infoBody.WriteString(labelStyle.Render("Load time:       ") + valueStyle.Render(fmt.Sprintf("%.1fs", a.loadTime.Seconds())) + "\n")
-	infoBody.WriteString(labelStyle.Render("Config file:     ") + valueStyle.Render(config.ConfigPath()))
+	infoBody.WriteString(labelStyle.Render("Config file:     ") + valueStyle.Render(config.Path()))
 
 	var b strings.Builder
 	b.WriteString(components.ContentCard("Settings", formBody.String(), cw))
