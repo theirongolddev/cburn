@@ -10,23 +10,18 @@ import (
 
 // Tab represents a single tab in the tab bar.
 type Tab struct {
-	Name    string
-	Key     rune
-	KeyPos  int // position of the shortcut letter in the name (-1 if not in name)
+	Name   string
+	Key    rune
+	KeyPos int // position of the shortcut letter in the name (-1 if not in name)
 }
 
 // Tabs defines all available tabs.
 var Tabs = []Tab{
-	{Name: "Dashboard", Key: 'd', KeyPos: 0},
+	{Name: "Overview", Key: 'o', KeyPos: 0},
 	{Name: "Costs", Key: 'c', KeyPos: 0},
 	{Name: "Sessions", Key: 's', KeyPos: 0},
-	{Name: "Models", Key: 'm', KeyPos: 0},
-	{Name: "Projects", Key: 'p', KeyPos: 0},
-	{Name: "Trends", Key: 't', KeyPos: 0},
-	{Name: "Efficiency", Key: 'e', KeyPos: 0},
-	{Name: "Activity", Key: 'a', KeyPos: 0},
-	{Name: "Budget", Key: 'b', KeyPos: 0},
-	{Name: "Settings", Key: 'x', KeyPos: -1}, // x is not in "Settings"
+	{Name: "Breakdown", Key: 'b', KeyPos: 0},
+	{Name: "Settings", Key: 'x', KeyPos: -1},
 }
 
 // RenderTabBar renders the tab bar with the given active index.
@@ -47,7 +42,7 @@ func RenderTabBar(activeIdx int, width int) string {
 	dimKeyStyle := lipgloss.NewStyle().
 		Foreground(t.TextDim)
 
-	var parts []string
+	parts := make([]string, 0, len(Tabs))
 	for i, tab := range Tabs {
 		var rendered string
 		if i == activeIdx {
@@ -70,25 +65,9 @@ func RenderTabBar(activeIdx int, width int) string {
 		parts = append(parts, rendered)
 	}
 
-	// Single row if all tabs fit
-	full := " " + strings.Join(parts, "  ")
-	if lipgloss.Width(full) <= width {
-		return full
+	bar := " " + strings.Join(parts, "  ")
+	if lipgloss.Width(bar) <= width {
+		return bar
 	}
-
-	// Fall back to two rows
-	row1 := strings.Join(parts[:5], "  ")
-	row2 := strings.Join(parts[5:], "  ")
-
-	return " " + row1 + "\n " + row2
-}
-
-// TabIdxByKey returns the tab index for a given key press, or -1.
-func TabIdxByKey(key rune) int {
-	for i, tab := range Tabs {
-		if tab.Key == key {
-			return i
-		}
-	}
-	return -1
+	return lipgloss.NewStyle().MaxWidth(width).Render(bar)
 }

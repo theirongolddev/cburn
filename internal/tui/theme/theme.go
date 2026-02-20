@@ -1,3 +1,4 @@
+// Package theme defines color themes for the cburn TUI dashboard.
 package theme
 
 import "github.com/charmbracelet/lipgloss"
@@ -8,7 +9,6 @@ type Theme struct {
 	Background  lipgloss.Color
 	Surface     lipgloss.Color
 	Border      lipgloss.Color
-	BorderHover lipgloss.Color
 	TextDim     lipgloss.Color
 	TextMuted   lipgloss.Color
 	TextPrimary lipgloss.Color
@@ -17,7 +17,6 @@ type Theme struct {
 	Orange      lipgloss.Color
 	Red         lipgloss.Color
 	Blue        lipgloss.Color
-	Purple      lipgloss.Color
 	Yellow      lipgloss.Color
 }
 
@@ -30,7 +29,6 @@ var FlexokiDark = Theme{
 	Background:  lipgloss.Color("#100F0F"),
 	Surface:     lipgloss.Color("#1C1B1A"),
 	Border:      lipgloss.Color("#282726"),
-	BorderHover: lipgloss.Color("#343331"),
 	TextDim:     lipgloss.Color("#575653"),
 	TextMuted:   lipgloss.Color("#6F6E69"),
 	TextPrimary: lipgloss.Color("#FFFCF0"),
@@ -39,7 +37,6 @@ var FlexokiDark = Theme{
 	Orange:      lipgloss.Color("#DA702C"),
 	Red:         lipgloss.Color("#D14D41"),
 	Blue:        lipgloss.Color("#4385BE"),
-	Purple:      lipgloss.Color("#8B7EC8"),
 	Yellow:      lipgloss.Color("#D0A215"),
 }
 
@@ -49,7 +46,6 @@ var CatppuccinMocha = Theme{
 	Background:  lipgloss.Color("#1E1E2E"),
 	Surface:     lipgloss.Color("#313244"),
 	Border:      lipgloss.Color("#45475A"),
-	BorderHover: lipgloss.Color("#585B70"),
 	TextDim:     lipgloss.Color("#6C7086"),
 	TextMuted:   lipgloss.Color("#A6ADC8"),
 	TextPrimary: lipgloss.Color("#CDD6F4"),
@@ -58,7 +54,6 @@ var CatppuccinMocha = Theme{
 	Orange:      lipgloss.Color("#FAB387"),
 	Red:         lipgloss.Color("#F38BA8"),
 	Blue:        lipgloss.Color("#89B4FA"),
-	Purple:      lipgloss.Color("#CBA6F7"),
 	Yellow:      lipgloss.Color("#F9E2AF"),
 }
 
@@ -68,7 +63,6 @@ var TokyoNight = Theme{
 	Background:  lipgloss.Color("#1A1B26"),
 	Surface:     lipgloss.Color("#24283B"),
 	Border:      lipgloss.Color("#414868"),
-	BorderHover: lipgloss.Color("#565F89"),
 	TextDim:     lipgloss.Color("#565F89"),
 	TextMuted:   lipgloss.Color("#A9B1D6"),
 	TextPrimary: lipgloss.Color("#C0CAF5"),
@@ -77,7 +71,6 @@ var TokyoNight = Theme{
 	Orange:      lipgloss.Color("#FF9E64"),
 	Red:         lipgloss.Color("#F7768E"),
 	Blue:        lipgloss.Color("#7AA2F7"),
-	Purple:      lipgloss.Color("#BB9AF7"),
 	Yellow:      lipgloss.Color("#E0AF68"),
 }
 
@@ -87,7 +80,6 @@ var Terminal = Theme{
 	Background:  lipgloss.Color("0"),
 	Surface:     lipgloss.Color("0"),
 	Border:      lipgloss.Color("8"),
-	BorderHover: lipgloss.Color("7"),
 	TextDim:     lipgloss.Color("8"),
 	TextMuted:   lipgloss.Color("7"),
 	TextPrimary: lipgloss.Color("15"),
@@ -96,7 +88,6 @@ var Terminal = Theme{
 	Orange:      lipgloss.Color("3"),
 	Red:         lipgloss.Color("1"),
 	Blue:        lipgloss.Color("4"),
-	Purple:      lipgloss.Color("5"),
 	Yellow:      lipgloss.Color("3"),
 }
 
