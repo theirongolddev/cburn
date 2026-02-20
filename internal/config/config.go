@@ -1,3 +1,4 @@
+// Package config handles cburn configuration loading, saving, and pricing.
 package config
 
 import (
@@ -10,11 +11,12 @@ import (
 
 // Config holds all cburn configuration.
 type Config struct {
-	General  GeneralConfig  `toml:"general"`
-	AdminAPI AdminAPIConfig `toml:"admin_api"`
-	Budget   BudgetConfig   `toml:"budget"`
+	General    GeneralConfig    `toml:"general"`
+	AdminAPI   AdminAPIConfig   `toml:"admin_api"`
+	ClaudeAI   ClaudeAIConfig   `toml:"claude_ai"`
+	Budget     BudgetConfig     `toml:"budget"`
 	Appearance AppearanceConfig `toml:"appearance"`
-	Pricing  PricingOverrides `toml:"pricing"`
+	Pricing    PricingOverrides `toml:"pricing"`
 }
 
 // GeneralConfig holds general preferences.
@@ -26,8 +28,14 @@ type GeneralConfig struct {
 
 // AdminAPIConfig holds Anthropic Admin API settings.
 type AdminAPIConfig struct {
-	APIKey  string `toml:"api_key,omitempty"`
+	APIKey  string `toml:"api_key,omitempty"` //nolint:gosec // config field, not a secret
 	BaseURL string `toml:"base_url,omitempty"`
+}
+
+// ClaudeAIConfig holds claude.ai session key settings for subscription data.
+type ClaudeAIConfig struct {
+	SessionKey string `toml:"session_key,omitempty"` //nolint:gosec // config field, not a secret
+	OrgID      string `toml:"org_id,omitempty"`      // auto-cached after first fetch
 }
 
 // BudgetConfig holds budget tracking settings.
@@ -67,8 +75,8 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConfigDir returns the XDG-compliant config directory.
-func ConfigDir() string {
+// Dir returns the XDG-compliant config directory.
+func Dir() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "cburn")
 	}
@@ -76,16 +84,16 @@ func ConfigDir() string {
 	return filepath.Join(home, ".config", "cburn")
 }
 
-// ConfigPath returns the full path to the config file.
-func ConfigPath() string {
-	return filepath.Join(ConfigDir(), "config.toml")
+// Path returns the full path to the config file.
+func Path() string {
+	return filepath.Join(Dir(), "config.toml")
 }
 
 // Load reads the config file, returning defaults if it doesn't exist.
 func Load() (Config, error) {
 	cfg := DefaultConfig()
 
-	data, err := os.ReadFile(ConfigPath())
+	data, err := os.ReadFile(Path())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil
@@ -102,19 +110,21 @@ func Load() (Config, error) {
 
 // Save writes the config to disk.
 func Save(cfg Config) error {
-	dir := ConfigDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dir := Dir()
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	f, err := os.OpenFile(ConfigPath(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(Path(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating config file: %w", err)
 	}
-	defer f.Close()
-
 	enc := toml.NewEncoder(f)
-	return enc.Encode(cfg)
+	if err := enc.Encode(cfg); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // GetAdminAPIKey returns the API key from env var or config, in that order.
@@ -125,8 +135,16 @@ func GetAdminAPIKey(cfg Config) string {
 	return cfg.AdminAPI.APIKey
 }
 
+// GetSessionKey returns the session key from env var or config, in that order.
+func GetSessionKey(cfg Config) string {
+	if key := os.Getenv("CLAUDE_SESSION_KEY"); key != "" {
+		return key
+	}
+	return cfg.ClaudeAI.SessionKey
+}
+
 // Exists returns true if a config file exists on disk.
 func Exists() bool {
-	_, err := os.Stat(ConfigPath())
+	_, err := os.Stat(Path())
 	return err == nil
 }
