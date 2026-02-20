@@ -5,23 +5,24 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 // Theme colors (Flexoki Dark)
 var (
-	ColorBg       = lipgloss.Color("#100F0F")
-	ColorSurface  = lipgloss.Color("#1C1B1A")
-	ColorBorder   = lipgloss.Color("#282726")
-	ColorTextDim  = lipgloss.Color("#575653")
+	ColorBg        = lipgloss.Color("#100F0F")
+	ColorSurface   = lipgloss.Color("#1C1B1A")
+	ColorBorder    = lipgloss.Color("#282726")
+	ColorTextDim   = lipgloss.Color("#575653")
 	ColorTextMuted = lipgloss.Color("#6F6E69")
-	ColorText     = lipgloss.Color("#FFFCF0")
-	ColorAccent   = lipgloss.Color("#3AA99F")
-	ColorGreen    = lipgloss.Color("#879A39")
-	ColorOrange   = lipgloss.Color("#DA702C")
-	ColorRed      = lipgloss.Color("#D14D41")
-	ColorBlue     = lipgloss.Color("#4385BE")
-	ColorPurple   = lipgloss.Color("#8B7EC8")
-	ColorYellow   = lipgloss.Color("#D0A215")
+	ColorText      = lipgloss.Color("#FFFCF0")
+	ColorAccent    = lipgloss.Color("#3AA99F")
+	ColorGreen     = lipgloss.Color("#879A39")
+	ColorOrange    = lipgloss.Color("#DA702C")
+	ColorRed       = lipgloss.Color("#D14D41")
+	ColorBlue      = lipgloss.Color("#4385BE")
+	ColorPurple    = lipgloss.Color("#8B7EC8")
+	ColorYellow    = lipgloss.Color("#D0A215")
 )
 
 // Styles
@@ -35,20 +36,8 @@ var (
 			Bold(true).
 			Foreground(ColorAccent)
 
-	valueStyle = lipgloss.NewStyle().
-			Foreground(ColorText)
-
 	mutedStyle = lipgloss.NewStyle().
 			Foreground(ColorTextMuted)
-
-	costStyle = lipgloss.NewStyle().
-			Foreground(ColorGreen)
-
-	tokenStyle = lipgloss.NewStyle().
-			Foreground(ColorBlue)
-
-	warnStyle = lipgloss.NewStyle().
-			Foreground(ColorOrange)
 
 	dimStyle = lipgloss.NewStyle().
 			Foreground(ColorTextDim)
@@ -59,7 +48,6 @@ type Table struct {
 	Title   string
 	Headers []string
 	Rows    [][]string
-	Widths  []int // optional column widths, auto-calculated if nil
 }
 
 // RenderTitle renders a centered title bar in a bordered box.
@@ -75,136 +63,47 @@ func RenderTitle(title string) string {
 	return border.Render(titleStyle.Render(title))
 }
 
-// RenderTable renders a bordered table with headers and rows.
+// RenderTable renders a bordered table with headers and rows using lipgloss/table.
 func RenderTable(t Table) string {
 	if len(t.Rows) == 0 && len(t.Headers) == 0 {
 		return ""
 	}
 
-	// Calculate column widths
-	numCols := len(t.Headers)
-	if numCols == 0 && len(t.Rows) > 0 {
-		numCols = len(t.Rows[0])
+	// Filter out "---" separator sentinels (not supported by lipgloss/table).
+	rows := make([][]string, 0, len(t.Rows))
+	for _, row := range t.Rows {
+		if len(row) == 1 && row[0] == "---" {
+			continue
+		}
+		rows = append(rows, row)
 	}
 
-	widths := make([]int, numCols)
-	if t.Widths != nil {
-		copy(widths, t.Widths)
-	} else {
-		for i, h := range t.Headers {
-			if len(h) > widths[i] {
-				widths[i] = len(h)
+	tbl := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(dimStyle).
+		BorderColumn(true).
+		BorderHeader(true).
+		Headers(t.Headers...).
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			s := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return s.Bold(true).Foreground(ColorAccent)
 			}
-		}
-		for _, row := range t.Rows {
-			for i, cell := range row {
-				if i < numCols && len(cell) > widths[i] {
-					widths[i] = len(cell)
-				}
+			s = s.Foreground(ColorText)
+			if col > 0 {
+				s = s.Align(lipgloss.Right)
 			}
-		}
-	}
+			return s
+		})
 
 	var b strings.Builder
-
-	// Title above table if present
 	if t.Title != "" {
 		b.WriteString("  ")
 		b.WriteString(headerStyle.Render(t.Title))
 		b.WriteString("\n")
 	}
-
-	totalWidth := 1 // left border
-	for _, w := range widths {
-		totalWidth += w + 3 // padding + separator
-	}
-
-	// Top border
-	b.WriteString(dimStyle.Render("╭"))
-	for i, w := range widths {
-		b.WriteString(dimStyle.Render(strings.Repeat("─", w+2)))
-		if i < numCols-1 {
-			b.WriteString(dimStyle.Render("┬"))
-		}
-	}
-	b.WriteString(dimStyle.Render("╮"))
-	b.WriteString("\n")
-
-	// Header row
-	if len(t.Headers) > 0 {
-		b.WriteString(dimStyle.Render("│"))
-		for i, h := range t.Headers {
-			w := widths[i]
-			padded := fmt.Sprintf(" %-*s ", w, h)
-			b.WriteString(headerStyle.Render(padded))
-			if i < numCols-1 {
-				b.WriteString(dimStyle.Render("│"))
-			}
-		}
-		b.WriteString(dimStyle.Render("│"))
-		b.WriteString("\n")
-
-		// Header separator
-		b.WriteString(dimStyle.Render("├"))
-		for i, w := range widths {
-			b.WriteString(dimStyle.Render(strings.Repeat("─", w+2)))
-			if i < numCols-1 {
-				b.WriteString(dimStyle.Render("┼"))
-			}
-		}
-		b.WriteString(dimStyle.Render("┤"))
-		b.WriteString("\n")
-	}
-
-	// Data rows
-	for _, row := range t.Rows {
-		if len(row) == 1 && row[0] == "---" {
-			// Separator row
-			b.WriteString(dimStyle.Render("├"))
-			for i, w := range widths {
-				b.WriteString(dimStyle.Render(strings.Repeat("─", w+2)))
-				if i < numCols-1 {
-					b.WriteString(dimStyle.Render("┼"))
-				}
-			}
-			b.WriteString(dimStyle.Render("┤"))
-			b.WriteString("\n")
-			continue
-		}
-
-		b.WriteString(dimStyle.Render("│"))
-		for i := 0; i < numCols; i++ {
-			w := widths[i]
-			cell := ""
-			if i < len(row) {
-				cell = row[i]
-			}
-
-			// Right-align numeric columns (all except first)
-			var padded string
-			if i == 0 {
-				padded = fmt.Sprintf(" %-*s ", w, cell)
-			} else {
-				padded = fmt.Sprintf(" %*s ", w, cell)
-			}
-			b.WriteString(valueStyle.Render(padded))
-			if i < numCols-1 {
-				b.WriteString(dimStyle.Render("│"))
-			}
-		}
-		b.WriteString(dimStyle.Render("│"))
-		b.WriteString("\n")
-	}
-
-	// Bottom border
-	b.WriteString(dimStyle.Render("╰"))
-	for i, w := range widths {
-		b.WriteString(dimStyle.Render(strings.Repeat("─", w+2)))
-		if i < numCols-1 {
-			b.WriteString(dimStyle.Render("┴"))
-		}
-	}
-	b.WriteString(dimStyle.Render("╯"))
+	b.WriteString(tbl.Render())
 	b.WriteString("\n")
 
 	return b.String()
@@ -242,26 +141,26 @@ func RenderSparkline(values []float64) string {
 
 	blocks := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
-	max := values[0]
+	maxVal := values[0]
 	for _, v := range values[1:] {
-		if v > max {
-			max = v
+		if v > maxVal {
+			maxVal = v
 		}
 	}
-	if max == 0 {
-		max = 1
+	if maxVal == 0 {
+		maxVal = 1
 	}
 
 	var b strings.Builder
 	for _, v := range values {
-		idx := int(v / max * float64(len(blocks)-1))
+		idx := int(v / maxVal * float64(len(blocks)-1))
 		if idx >= len(blocks) {
 			idx = len(blocks) - 1
 		}
 		if idx < 0 {
 			idx = 0
 		}
-		b.WriteRune(blocks[idx])
+		b.WriteRune(blocks[idx]) //nolint:gosec // bounds checked above
 	}
 
 	return b.String()
@@ -270,12 +169,12 @@ func RenderSparkline(values []float64) string {
 // RenderHorizontalBar renders a horizontal bar chart entry.
 func RenderHorizontalBar(label string, value, maxValue float64, maxWidth int) string {
 	if maxValue <= 0 {
-		return fmt.Sprintf("  %s", label)
+		return "  " + label
 	}
 	barLen := int(value / maxValue * float64(maxWidth))
 	if barLen < 0 {
 		barLen = 0
 	}
 	bar := strings.Repeat("█", barLen)
-	return fmt.Sprintf("  %s", bar)
+	return "  " + bar
 }

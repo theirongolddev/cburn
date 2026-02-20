@@ -1,3 +1,4 @@
+// Package cmd implements the cburn CLI commands.
 package cmd
 
 import (
@@ -24,7 +25,7 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Printf("  Config file: %s\n", config.ConfigPath())
+	fmt.Printf("  Config file: %s\n", config.Path())
 	if config.Exists() {
 		fmt.Println("  Status: loaded")
 	} else {
@@ -37,6 +38,18 @@ func runConfig(_ *cobra.Command, _ []string) error {
 	fmt.Printf("    Include subagents: %v\n", cfg.General.IncludeSubagents)
 	if cfg.General.ClaudeDir != "" {
 		fmt.Printf("    Claude directory:  %s\n", cfg.General.ClaudeDir)
+	}
+	fmt.Println()
+
+	fmt.Println("  [Claude.ai]")
+	sessionKey := config.GetSessionKey(cfg)
+	if sessionKey != "" {
+		fmt.Printf("    Session key: %s\n", maskAPIKey(sessionKey))
+	} else {
+		fmt.Println("    Session key: not configured")
+	}
+	if cfg.ClaudeAI.OrgID != "" {
+		fmt.Printf("    Org ID:      %s\n", cfg.ClaudeAI.OrgID)
 	}
 	fmt.Println()
 
