@@ -16,6 +16,7 @@ type Config struct {
 	ClaudeAI   ClaudeAIConfig   `toml:"claude_ai"`
 	Budget     BudgetConfig     `toml:"budget"`
 	Appearance AppearanceConfig `toml:"appearance"`
+	TUI        TUIConfig        `toml:"tui"`
 	Pricing    PricingOverrides `toml:"pricing"`
 }
 
@@ -48,6 +49,12 @@ type AppearanceConfig struct {
 	Theme string `toml:"theme"`
 }
 
+// TUIConfig holds TUI-specific settings.
+type TUIConfig struct {
+	AutoRefresh        bool `toml:"auto_refresh"`
+	RefreshIntervalSec int  `toml:"refresh_interval_sec"`
+}
+
 // PricingOverrides allows user-defined pricing for specific models.
 type PricingOverrides struct {
 	Overrides map[string]ModelPricingOverride `toml:"overrides,omitempty"`
@@ -71,6 +78,10 @@ func DefaultConfig() Config {
 		},
 		Appearance: AppearanceConfig{
 			Theme: "flexoki-dark",
+		},
+		TUI: TUIConfig{
+			AutoRefresh:        true,
+			RefreshIntervalSec: 30,
 		},
 	}
 }

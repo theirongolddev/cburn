@@ -12,21 +12,29 @@ import (
 )
 
 // RenderStatusBar renders the bottom status bar with optional rate limit indicators.
-func RenderStatusBar(width int, dataAge string, subData *claudeai.SubscriptionData) string {
+func RenderStatusBar(width int, dataAge string, subData *claudeai.SubscriptionData, refreshing, autoRefresh bool) string {
 	t := theme.Active
 
 	style := lipgloss.NewStyle().
 		Foreground(t.TextMuted).
 		Width(width)
 
-	left := " [?]help  [q]uit"
+	left := " [?]help  [r]efresh  [q]uit"
 
 	// Build rate limit indicators for the middle section
 	ratePart := renderStatusRateLimits(subData)
 
-	right := ""
-	if dataAge != "" {
-		right = fmt.Sprintf("Data: %s ", dataAge)
+	// Build right side with refresh status
+	var right string
+	if refreshing {
+		refreshStyle := lipgloss.NewStyle().Foreground(t.Accent)
+		right = refreshStyle.Render("↻ refreshing ")
+	} else if dataAge != "" {
+		autoStr := ""
+		if autoRefresh {
+			autoStr = "↻ "
+		}
+		right = fmt.Sprintf("%sData: %s ", autoStr, dataAge)
 	}
 
 	// Layout: left + ratePart + right, with padding distributed

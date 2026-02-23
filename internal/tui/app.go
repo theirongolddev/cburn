@@ -42,12 +42,24 @@ type SubDataMsg struct {
 	Data *claudeai.SubscriptionData
 }
 
+// RefreshDataMsg is sent when a background data refresh completes.
+type RefreshDataMsg struct {
+	Sessions []model.SessionStats
+	LoadTime time.Duration
+}
+
 // App is the root Bubble Tea model.
 type App struct {
 	// Data
 	sessions []model.SessionStats
 	loaded   bool
 	loadTime time.Duration
+
+	// Auto-refresh state
+	autoRefresh     bool
+	refreshInterval time.Duration
+	lastRefresh     time.Time
+	refreshing      bool
 
 	// Subscription data from claude.ai
 	subData     *claudeai.SubscriptionData
@@ -61,6 +73,10 @@ type App struct {
 	dailyStats []model.DailyStats
 	models     []model.ModelStats
 	projects   []model.ProjectStats
+
+	// Live activity charts (today + last hour)
+	todayHourly []model.HourlyStats
+	lastHour    []model.MinuteStats
 
 	// Subagent grouping: parent session ID -> subagent sessions
 	subagentMap map[string][]model.SessionStats
@@ -110,6 +126,13 @@ func NewApp(claudeDir string, days int, project, modelFilter string, includeSuba
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AA99F"))
 
+	// Load refresh settings from config
+	cfg, _ := config.Load()
+	refreshInterval := time.Duration(cfg.TUI.RefreshIntervalSec) * time.Second
+	if refreshInterval < 10*time.Second {
+		refreshInterval = 30 * time.Second // minimum 10s, default 30s
+	}
+
 	return App{
 		claudeDir:        claudeDir,
 		days:             days,
@@ -117,6 +140,8 @@ func NewApp(claudeDir string, days int, project, modelFilter string, includeSuba
 		project:          project,
 		modelFilter:      modelFilter,
 		includeSubagents: includeSubagents,
+		autoRefresh:      cfg.TUI.AutoRefresh,
+		refreshInterval:  refreshInterval,
 		spinner:          sp,
 		loadSub:          make(chan tea.Msg, 1),
 	}
@@ -156,6 +181,10 @@ func (a *App) recompute() {
 	a.dailyStats = pipeline.AggregateDays(filtered, since, now)
 	a.models = pipeline.AggregateModels(filtered, since, now)
 	a.projects = pipeline.AggregateProjects(filtered, since, now)
+
+	// Live activity charts
+	a.todayHourly = pipeline.AggregateTodayHourly(filtered)
+	a.lastHour = pipeline.AggregateLastHour(filtered)
 
 	// Previous period for comparison (same duration, immediately before)
 	prevSince := since.AddDate(0, 0, -a.days)
@@ -335,6 +364,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 
+		// Manual refresh
+		if key == "r" && !a.refreshing {
+			a.refreshing = true
+			return a, refreshDataCmd(a.claudeDir, a.includeSubagents)
+		}
+
+		// Toggle auto-refresh
+		if key == "R" {
+			a.autoRefresh = !a.autoRefresh
+			// Persist to config
+			cfg, _ := config.Load()
+			cfg.TUI.AutoRefresh = a.autoRefresh
+			_ = config.Save(cfg)
+			return a, nil
+		}
+
 		// Tab navigation
 		switch key {
 		case "o":
@@ -358,6 +403,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.sessions = msg.Sessions
 		a.loaded = true
 		a.loadTime = msg.LoadTime
+		a.lastRefresh = time.Now()
 		a.recompute()
 
 		// Activate first-run setup after data loads
@@ -413,7 +459,25 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Auto-refresh session data
+		if a.loaded && a.autoRefresh && !a.refreshing {
+			if time.Since(a.lastRefresh) >= a.refreshInterval {
+				a.refreshing = true
+				cmds = append(cmds, refreshDataCmd(a.claudeDir, a.includeSubagents))
+			}
+		}
+
 		return a, tea.Batch(cmds...)
+
+	case RefreshDataMsg:
+		a.refreshing = false
+		a.lastRefresh = time.Now()
+		if msg.Sessions != nil {
+			a.sessions = msg.Sessions
+			a.loadTime = msg.LoadTime
+			a.recompute()
+		}
+		return a, nil
 	}
 
 	// Forward unhandled messages to the setup form (cursor blinks, etc.)
@@ -570,6 +634,7 @@ func (a App) viewHelp() string {
 		{"^d / ^u", "Scroll detail half-page"},
 		{"Enter / f", "Expand session full-screen"},
 		{"Esc", "Back to split view"},
+		{"r / R", "Refresh now / Toggle auto-refresh"},
 		{"?", "Toggle this help"},
 		{"q", "Quit (or back from full-screen)"},
 	}
@@ -607,7 +672,7 @@ func (a App) viewMain() string {
 
 	// 2. Render status bar
 	dataAge := fmt.Sprintf("%.1fs", a.loadTime.Seconds())
-	statusBar := components.RenderStatusBar(w, dataAge, a.subData)
+	statusBar := components.RenderStatusBar(w, dataAge, a.subData, a.refreshing, a.autoRefresh)
 
 	// 3. Calculate content zone height
 	headerH := lipgloss.Height(header)
@@ -792,6 +857,35 @@ func waitForLoadMsg(sub chan tea.Msg) tea.Cmd {
 
 func storeOpen() (*store.Cache, error) {
 	return store.Open(pipeline.CachePath())
+}
+
+// refreshDataCmd refreshes session data in the background (no progress UI).
+func refreshDataCmd(claudeDir string, includeSubagents bool) tea.Cmd {
+	return func() tea.Msg {
+		start := time.Now()
+
+		cache, err := storeOpen()
+		if err == nil {
+			cr, loadErr := pipeline.LoadWithCache(claudeDir, includeSubagents, cache, nil)
+			_ = cache.Close()
+			if loadErr == nil {
+				return RefreshDataMsg{
+					Sessions: cr.Sessions,
+					LoadTime: time.Since(start),
+				}
+			}
+		}
+
+		// Fallback: uncached load
+		result, err := pipeline.Load(claudeDir, includeSubagents, nil)
+		if err != nil {
+			return RefreshDataMsg{LoadTime: time.Since(start)}
+		}
+		return RefreshDataMsg{
+			Sessions: result.Sessions,
+			LoadTime: time.Since(start),
+		}
+	}
 }
 
 // chartDateLabels builds compact X-axis labels for a chronological date series.

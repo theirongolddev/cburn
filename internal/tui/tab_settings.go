@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"cburn/internal/cli"
 	"cburn/internal/config"
@@ -21,6 +22,8 @@ const (
 	settingsFieldTheme
 	settingsFieldDays
 	settingsFieldBudget
+	settingsFieldAutoRefresh
+	settingsFieldRefreshInterval
 	settingsFieldCount // sentinel
 )
 
@@ -79,6 +82,19 @@ func (a App) settingsStartEdit() (tea.Model, tea.Cmd) {
 		if cfg.Budget.MonthlyUSD != nil {
 			ti.SetValue(fmt.Sprintf("%.0f", *cfg.Budget.MonthlyUSD))
 		}
+		ti.EchoMode = textinput.EchoNormal
+	case settingsFieldAutoRefresh:
+		ti.Placeholder = "true or false"
+		ti.SetValue(strconv.FormatBool(a.autoRefresh))
+		ti.EchoMode = textinput.EchoNormal
+	case settingsFieldRefreshInterval:
+		ti.Placeholder = "30 (seconds, minimum 10)"
+		// Use effective value from App state to match display
+		intervalSec := int(a.refreshInterval.Seconds())
+		if intervalSec < 10 {
+			intervalSec = 30
+		}
+		ti.SetValue(strconv.Itoa(intervalSec))
 		ti.EchoMode = textinput.EchoNormal
 	}
 
@@ -144,6 +160,15 @@ func (a *App) settingsSave() {
 				cfg.Budget.MonthlyUSD = &b
 			}
 		}
+	case settingsFieldAutoRefresh:
+		cfg.TUI.AutoRefresh = val == "true" || val == "1" || val == "yes"
+		a.autoRefresh = cfg.TUI.AutoRefresh
+	case settingsFieldRefreshInterval:
+		var interval int
+		if _, err := fmt.Sscanf(val, "%d", &interval); err == nil && interval >= 10 {
+			cfg.TUI.RefreshIntervalSec = interval
+			a.refreshInterval = time.Duration(interval) * time.Second
+		}
 	}
 
 	a.settings.saveErr = config.Save(cfg)
@@ -184,6 +209,13 @@ func (a App) renderSettingsTab(cw int) string {
 		}
 	}
 
+	// Use live App state for TUI-specific settings (auto-refresh, interval)
+	// to ensure display matches actual behavior after R toggle
+	refreshIntervalSec := int(a.refreshInterval.Seconds())
+	if refreshIntervalSec < 10 {
+		refreshIntervalSec = 30 // match the effective default
+	}
+
 	fields := []field{
 		{"Admin API Key", apiKeyDisplay},
 		{"Session Key", sessionKeyDisplay},
@@ -195,6 +227,8 @@ func (a App) renderSettingsTab(cw int) string {
 			}
 			return "(not set)"
 		}()},
+		{"Auto Refresh", strconv.FormatBool(a.autoRefresh)},
+		{"Refresh Interval", fmt.Sprintf("%ds", refreshIntervalSec)},
 	}
 
 	var formBody strings.Builder
