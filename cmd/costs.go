@@ -3,9 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"cburn/internal/cli"
-	"cburn/internal/config"
-	"cburn/internal/pipeline"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/pipeline"
 
 	"github.com/spf13/cobra"
 )
@@ -32,7 +31,7 @@ func runCosts(_ *cobra.Command, _ []string) error {
 
 	filtered, since, until := applyFilters(result.Sessions)
 	stats := pipeline.Aggregate(filtered, since, until)
-	models := pipeline.AggregateModels(filtered, since, until)
+	tokenCosts, modelCosts := pipeline.AggregateCostBreakdown(filtered, since, until)
 
 	if stats.TotalSessions == 0 {
 		fmt.Println("\n  No sessions in the selected time range.")
@@ -54,30 +53,14 @@ func runCosts(_ *cobra.Command, _ []string) error {
 		cost float64
 	}
 
-	// Calculate costs per token type from raw token counts using canonical pricing
-	var inputCost, outputCost, cache5mCost, cache1hCost, cacheReadCost float64
-	for _, s := range pipeline.FilterByTime(filtered, since, until) {
-		for modelName, mu := range s.Models {
-			p, ok := config.LookupPricing(modelName)
-			if !ok {
-				continue
-			}
-			inputCost += float64(mu.InputTokens) * p.InputPerMTok / 1_000_000
-			outputCost += float64(mu.OutputTokens) * p.OutputPerMTok / 1_000_000
-			cache5mCost += float64(mu.CacheCreation5mTokens) * p.CacheWrite5mPerMTok / 1_000_000
-			cache1hCost += float64(mu.CacheCreation1hTokens) * p.CacheWrite1hPerMTok / 1_000_000
-			cacheReadCost += float64(mu.CacheReadTokens) * p.CacheReadPerMTok / 1_000_000
-		}
-	}
-
-	totalCost := inputCost + outputCost + cache5mCost + cache1hCost + cacheReadCost
+	totalCost := tokenCosts.TotalCost
 
 	costs := []tokenCost{
-		{"Output", outputCost},
-		{"Cache Write (1h)", cache1hCost},
-		{"Input", inputCost},
-		{"Cache Write (5m)", cache5mCost},
-		{"Cache Read", cacheReadCost},
+		{"Output", tokenCosts.OutputCost},
+		{"Cache Write (1h)", tokenCosts.Cache1hCost},
+		{"Input", tokenCosts.InputCost},
+		{"Cache Write (5m)", tokenCosts.Cache5mCost},
+		{"Cache Read", tokenCosts.CacheReadCost},
 	}
 
 	// Sort by cost descending (already in expected order, but ensure)
@@ -116,29 +99,22 @@ func runCosts(_ *cobra.Command, _ []string) error {
 	}
 
 	// Cost by model
-	modelRows := make([][]string, 0, len(models)+2)
-	for _, ms := range models {
-		p, _ := config.LookupPricing(ms.Model)
-		mInput := float64(ms.InputTokens) * p.InputPerMTok / 1_000_000
-		mOutput := float64(ms.OutputTokens) * p.OutputPerMTok / 1_000_000
-		mCache := float64(ms.CacheCreation5m)*p.CacheWrite5mPerMTok/1_000_000 +
-			float64(ms.CacheCreation1h)*p.CacheWrite1hPerMTok/1_000_000 +
-			float64(ms.CacheReadTokens)*p.CacheReadPerMTok/1_000_000
-
+	modelRows := make([][]string, 0, len(modelCosts)+2)
+	for _, mc := range modelCosts {
 		modelRows = append(modelRows, []string{
-			shortModel(ms.Model),
-			cli.FormatCost(mInput),
-			cli.FormatCost(mOutput),
-			cli.FormatCost(mCache),
-			cli.FormatCost(ms.EstimatedCost),
+			shortModel(mc.Model),
+			cli.FormatCost(mc.InputCost),
+			cli.FormatCost(mc.OutputCost),
+			cli.FormatCost(mc.CacheCost),
+			cli.FormatCost(mc.TotalCost),
 		})
 	}
 	modelRows = append(modelRows, []string{"---"})
 	modelRows = append(modelRows, []string{
 		"TOTAL",
-		cli.FormatCost(inputCost),
-		cli.FormatCost(outputCost),
-		cli.FormatCost(cache5mCost + cache1hCost + cacheReadCost),
+		cli.FormatCost(tokenCosts.InputCost),
+		cli.FormatCost(tokenCosts.OutputCost),
+		cli.FormatCost(tokenCosts.CacheCost),
 		cli.FormatCost(totalCost),
 	})
 
