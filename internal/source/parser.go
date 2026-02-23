@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"cburn/internal/config"
-	"cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/model"
 )
 
 // Byte patterns for field extraction.
@@ -173,8 +173,9 @@ func ParseFile(df DiscoveredFile) ParseResult {
 	}
 
 	for _, call := range calls {
-		call.EstimatedCost = config.CalculateCost(
+		call.EstimatedCost = config.CalculateCostAt(
 			call.Model,
+			call.Timestamp,
 			call.InputTokens,
 			call.OutputTokens,
 			call.CacheCreation5mTokens,

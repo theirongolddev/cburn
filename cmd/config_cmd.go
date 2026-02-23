@@ -4,7 +4,7 @@ package cmd
 import (
 	"fmt"
 
-	"cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/config"
 
 	"github.com/spf13/cobra"
 )

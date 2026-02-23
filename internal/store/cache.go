@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/model"
 
 	_ "modernc.org/sqlite" // register sqlite driver
 )

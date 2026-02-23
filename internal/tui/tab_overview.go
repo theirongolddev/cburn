@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/cli"
-	"cburn/internal/pipeline"
-	"cburn/internal/tui/components"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/pipeline"
+	"github.com/theirongolddev/cburn/internal/tui/components"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/lipgloss"
 )

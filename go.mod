@@ -1,4 +1,4 @@
-module cburn
+module github.com/theirongolddev/cburn
 
 go 1.24.2
 

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"cburn/internal/source"
-	"cburn/internal/store"
+	"github.com/theirongolddev/cburn/internal/source"
+	"github.com/theirongolddev/cburn/internal/store"
 )
 
 // CachedLoadResult extends LoadResult with cache metadata.
@@ -173,5 +173,6 @@ func CacheDir() string {
 
 // CachePath returns the full path to the cache database.
 func CachePath() string {
-	return filepath.Join(CacheDir(), "metrics.db")
+	// v2 includes historical pricing-aware cost calculations.
+	return filepath.Join(CacheDir(), "metrics_v2.db")
 }

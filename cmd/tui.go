@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"cburn/internal/config"
-	"cburn/internal/tui"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/tui"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cburn/internal/source"
-	"cburn/internal/store"
+	"github.com/theirongolddev/cburn/internal/source"
+	"github.com/theirongolddev/cburn/internal/store"
 )
 
 func BenchmarkLoad(b *testing.B) {

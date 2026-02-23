@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/claudeai"
-	"cburn/internal/cli"
-	"cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/claudeai"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/config"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"

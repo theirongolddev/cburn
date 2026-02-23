@@ -148,7 +148,7 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 
 	req.Header.Set("Cookie", "sessionKey="+c.sessionKey)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "cburn/1.0")
+	req.Header.Set("User-Agent", "github.com/theirongolddev/cburn/1.0")
 
 	//nolint:gosec // URL is constructed from const baseURL
 	resp, err := c.http.Do(req)

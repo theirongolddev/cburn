@@ -6,8 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"cburn/internal/model"
-	"cburn/internal/source"
+	"github.com/theirongolddev/cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/source"
 )
 
 // LoadResult holds the output of the full data loading pipeline.

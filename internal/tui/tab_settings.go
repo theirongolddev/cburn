@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/cli"
-	"cburn/internal/config"
-	"cburn/internal/tui/components"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/tui/components"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

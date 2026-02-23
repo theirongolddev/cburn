@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"cburn/internal/config"
-	"cburn/internal/source"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/source"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"

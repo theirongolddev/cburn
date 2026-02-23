@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"cburn/internal/cli"
-	"cburn/internal/model"
-	"cburn/internal/pipeline"
-	"cburn/internal/store"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/pipeline"
+	"github.com/theirongolddev/cburn/internal/store"
 
 	"github.com/spf13/cobra"
 )

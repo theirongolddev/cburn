@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/config"
-	"cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/model"
 )
 
 // Aggregate computes summary statistics from a slice of session stats,
@@ -51,7 +51,7 @@ func Aggregate(sessions []model.SessionStats, since, until time.Time) model.Summ
 	// Cache savings (sum across all models found in sessions)
 	for _, s := range filtered {
 		for modelName, mu := range s.Models {
-			stats.CacheSavings += config.CalculateCacheSavings(modelName, mu.CacheReadTokens)
+			stats.CacheSavings += config.CalculateCacheSavingsAt(modelName, s.StartTime, mu.CacheReadTokens)
 		}
 	}
 

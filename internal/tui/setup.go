@@ -3,8 +3,8 @@ package tui
 import (
 	"fmt"
 
-	"cburn/internal/config"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/huh"
 )

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"

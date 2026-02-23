@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"cburn/internal/cli"
-	"cburn/internal/pipeline"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/pipeline"
 
 	"github.com/spf13/cobra"
 )

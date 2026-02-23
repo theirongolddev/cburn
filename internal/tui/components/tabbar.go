@@ -3,7 +3,7 @@ package components
 import (
 	"strings"
 
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/lipgloss"
 )
