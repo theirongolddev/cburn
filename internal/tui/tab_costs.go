@@ -160,9 +160,13 @@ func (a App) renderCostsTab(cw int) string {
 		sorted := make([]model.DailyStats, len(days))
 		copy(sorted, days)
 		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].Date.After(sorted[j].Date)
+			return sorted[i].EstimatedCost > sorted[j].EstimatedCost
 		})
-		for _, d := range sorted[:spendLimit] {
+		topDays := sorted[:spendLimit]
+		sort.Slice(topDays, func(i, j int) bool {
+			return topDays[i].Date.After(topDays[j].Date)
+		})
+		for _, d := range topDays {
 			fmt.Fprintf(&spendBody, "%s  %s\n",
 				valueStyle.Render(d.Date.Format("Jan 02")),
 				lipgloss.NewStyle().Foreground(t.Green).Render(cli.FormatCost(d.EstimatedCost)))
