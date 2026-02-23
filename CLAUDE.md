@@ -83,3 +83,13 @@ Run `cburn setup` for interactive configuration.
 - `components.CardInnerWidth(w)` computes usable width inside a card border.
 - `components.LayoutRow(w, n)` splits width into n columns accounting for gaps.
 - When rendering inline bars (like Activity panel), dynamically compute column widths from actual data to prevent line wrapping.
+
+---
+
+## Architectural Insights (Learned Patterns)
+
+### ANSI Width Calculation
+**Always use `lipgloss.Width()`, never `len()`** for styled strings. `len()` counts raw bytes including ANSI escape sequences (~20 bytes per color code). A 20-char bar with two color codes becomes ~60+ bytes, breaking column layouts. For padding, use custom width-aware padding since `fmt.Sprintf("%*s")` also pads by byte count.
+
+### JSON Top-Level Type Detection
+When parsing JSONL with nested JSON content (like Claude Code sessions), `bytes.Contains(line, pattern)` matches nested strings too. For top-level field detection, track brace depth and skip quoted strings to find the actual top-level `"type"` field.
