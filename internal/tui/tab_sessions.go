@@ -5,11 +5,11 @@ import (
 	"sort"
 	"strings"
 
-	"cburn/internal/cli"
-	"cburn/internal/config"
-	"cburn/internal/model"
-	"cburn/internal/tui/components"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/tui/components"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
@@ -76,8 +76,38 @@ func (a App) renderSessionsContent(filtered []model.SessionStats, cw, h int) str
 	t := theme.Active
 	ss := a.sessState
 
+	// Show search input when in search mode
+	if ss.searching {
+		var b strings.Builder
+		searchStyle := lipgloss.NewStyle().Foreground(t.Accent)
+		b.WriteString(searchStyle.Render("  Search: "))
+		b.WriteString(ss.searchInput.View())
+		b.WriteString("\n")
+		hintStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+		b.WriteString(hintStyle.Render("  [Enter] apply  [Esc] cancel"))
+		b.WriteString("\n\n")
+
+		// Show preview of filtered results
+		previewFiltered := filterSessionsBySearch(a.filtered, ss.searchInput.Value())
+		b.WriteString(hintStyle.Render(fmt.Sprintf("  %d sessions match", len(previewFiltered))))
+
+		return b.String()
+	}
+
+	// Build title with search indicator
+	title := fmt.Sprintf("Sessions [%dd]", a.days)
+	if ss.searchQuery != "" {
+		title = fmt.Sprintf("Sessions [%dd] / %q (%d)", a.days, ss.searchQuery, len(filtered))
+	}
+
 	if len(filtered) == 0 {
-		return components.ContentCard("Sessions", lipgloss.NewStyle().Foreground(t.TextMuted).Render("No sessions found"), cw)
+		var body strings.Builder
+		body.WriteString(lipgloss.NewStyle().Foreground(t.TextMuted).Render("No sessions found"))
+		if ss.searchQuery != "" {
+			body.WriteString("\n\n")
+			body.WriteString(lipgloss.NewStyle().Foreground(t.TextDim).Render("[Esc] clear search  [/] new search"))
+		}
+		return components.ContentCard(title, body.String(), cw)
 	}
 
 	// Force single-pane detail mode in compact layouts.
@@ -97,7 +127,16 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 	t := theme.Active
 	ss := a.sessState
 
-	if ss.cursor >= len(sessions) {
+	// Clamp cursor to valid range
+	cursor := ss.cursor
+	if cursor >= len(sessions) {
+		cursor = len(sessions) - 1
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+
+	if len(sessions) == 0 {
 		return ""
 	}
 
@@ -130,11 +169,11 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 	}
 
 	offset := ss.offset
-	if ss.cursor < offset {
-		offset = ss.cursor
+	if cursor < offset {
+		offset = cursor
 	}
-	if ss.cursor >= offset+visible {
-		offset = ss.cursor - visible + 1
+	if cursor >= offset+visible {
+		offset = cursor - visible + 1
 	}
 
 	end := offset + visible
@@ -158,7 +197,7 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 			padN = 1
 		}
 
-		if i == ss.cursor {
+		if i == cursor {
 			fullLine := leftPart + strings.Repeat(" ", padN) + costStr
 			// Pad to full width for continuous highlight background
 			if len(fullLine) < leftInner {
@@ -175,10 +214,15 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 		leftBody.WriteString("\n")
 	}
 
-	leftCard := components.ContentCard(fmt.Sprintf("Sessions [%dd]", a.days), leftBody.String(), leftW)
+	// Build title with search indicator
+	leftTitle := fmt.Sprintf("Sessions [%dd]", a.days)
+	if ss.searchQuery != "" {
+		leftTitle = fmt.Sprintf("Search: %q (%d)", ss.searchQuery, len(sessions))
+	}
+	leftCard := components.ContentCard(leftTitle, leftBody.String(), leftW)
 
 	// Right pane: full session detail with scroll support
-	sel := sessions[ss.cursor]
+	sel := sessions[cursor]
 	rightBody := a.renderDetailBody(sel, rightW, headerStyle, mutedStyle)
 
 	// Apply detail scroll offset
@@ -194,10 +238,15 @@ func (a App) renderSessionDetail(sessions []model.SessionStats, cw, h int) strin
 	t := theme.Active
 	ss := a.sessState
 
-	if ss.cursor >= len(sessions) {
+	// Clamp cursor to valid range
+	cursor := ss.cursor
+	if cursor >= len(sessions) {
+		cursor = len(sessions) - 1
+	}
+	if cursor < 0 || len(sessions) == 0 {
 		return ""
 	}
-	sel := sessions[ss.cursor]
+	sel := sessions[cursor]
 
 	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
 	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
@@ -266,14 +315,14 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 	savings := 0.0
 
 	for modelName, mu := range sel.Models {
-		p, ok := config.LookupPricing(modelName)
+		p, ok := config.LookupPricingAt(modelName, sel.StartTime)
 		if ok {
 			inputCost += float64(mu.InputTokens) * p.InputPerMTok / 1e6
 			outputCost += float64(mu.OutputTokens) * p.OutputPerMTok / 1e6
 			cache5mCost += float64(mu.CacheCreation5mTokens) * p.CacheWrite5mPerMTok / 1e6
 			cache1hCost += float64(mu.CacheCreation1hTokens) * p.CacheWrite1hPerMTok / 1e6
 			cacheReadCost += float64(mu.CacheReadTokens) * p.CacheReadPerMTok / 1e6
-			savings += config.CalculateCacheSavings(modelName, mu.CacheReadTokens)
+			savings += config.CalculateCacheSavingsAt(modelName, sel.StartTime, mu.CacheReadTokens)
 		}
 	}
 
@@ -428,9 +477,9 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 
 	body.WriteString("\n")
 	if w < compactWidth {
-		body.WriteString(mutedStyle.Render("[j/k] navigate  [J/K] scroll  [q] quit"))
+		body.WriteString(mutedStyle.Render("[/] search  [j/k] navigate  [J/K] scroll  [q] quit"))
 	} else {
-		body.WriteString(mutedStyle.Render("[Enter] expand  [j/k] navigate  [J/K/^d/^u] scroll  [q] quit"))
+		body.WriteString(mutedStyle.Render("[/] search  [Enter] expand  [j/k] navigate  [J/K/^d/^u] scroll  [q] quit"))
 	}
 
 	return body.String()

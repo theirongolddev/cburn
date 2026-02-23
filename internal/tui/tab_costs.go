@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/claudeai"
-	"cburn/internal/cli"
-	"cburn/internal/config"
-	"cburn/internal/model"
-	"cburn/internal/tui/components"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/claudeai"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/tui/components"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
@@ -20,8 +20,8 @@ import (
 func (a App) renderCostsTab(cw int) string {
 	t := theme.Active
 	stats := a.stats
-	models := a.models
 	days := a.dailyStats
+	modelCosts := a.modelCosts
 
 	var b strings.Builder
 
@@ -69,11 +69,11 @@ func (a App) renderCostsTab(cw int) string {
 		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+totalW+1)))
 		tableBody.WriteString("\n")
 
-		for _, ms := range models {
+		for _, mc := range modelCosts {
 			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %10s",
 				nameW,
-				truncStr(shortModel(ms.Model), nameW),
-				cli.FormatCost(ms.EstimatedCost))))
+				truncStr(shortModel(mc.Model), nameW),
+				cli.FormatCost(mc.TotalCost))))
 			tableBody.WriteString("\n")
 		}
 		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+totalW+1)))
@@ -83,22 +83,14 @@ func (a App) renderCostsTab(cw int) string {
 		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", innerW)))
 		tableBody.WriteString("\n")
 
-		for _, ms := range models {
-			inputCost := 0.0
-			outputCost := 0.0
-			if p, ok := config.LookupPricing(ms.Model); ok {
-				inputCost = float64(ms.InputTokens) * p.InputPerMTok / 1e6
-				outputCost = float64(ms.OutputTokens) * p.OutputPerMTok / 1e6
-			}
-			cacheCost := ms.EstimatedCost - inputCost - outputCost
-
+		for _, mc := range modelCosts {
 			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %10s %10s %10s %10s",
 				nameW,
-				truncStr(shortModel(ms.Model), nameW),
-				cli.FormatCost(inputCost),
-				cli.FormatCost(outputCost),
-				cli.FormatCost(cacheCost),
-				cli.FormatCost(ms.EstimatedCost))))
+				truncStr(shortModel(mc.Model), nameW),
+				cli.FormatCost(mc.InputCost),
+				cli.FormatCost(mc.OutputCost),
+				cli.FormatCost(mc.CacheCost),
+				cli.FormatCost(mc.TotalCost))))
 			tableBody.WriteString("\n")
 		}
 

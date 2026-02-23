@@ -10,17 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"cburn/internal/claudeai"
-	"cburn/internal/cli"
-	"cburn/internal/config"
-	"cburn/internal/model"
-	"cburn/internal/pipeline"
-	"cburn/internal/store"
-	"cburn/internal/tui/components"
-	"cburn/internal/tui/theme"
+	"github.com/theirongolddev/cburn/internal/claudeai"
+	"github.com/theirongolddev/cburn/internal/cli"
+	"github.com/theirongolddev/cburn/internal/config"
+	"github.com/theirongolddev/cburn/internal/model"
+	"github.com/theirongolddev/cburn/internal/pipeline"
+	"github.com/theirongolddev/cburn/internal/store"
+	"github.com/theirongolddev/cburn/internal/tui/components"
+	"github.com/theirongolddev/cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -74,6 +73,8 @@ type App struct {
 	dailyStats []model.DailyStats
 	models     []model.ModelStats
 	projects   []model.ProjectStats
+	costByType pipeline.TokenTypeCosts
+	modelCosts []pipeline.ModelCostBreakdown
 
 	// Live activity charts (today + last hour)
 	todayHourly []model.HourlyStats
@@ -183,6 +184,7 @@ func (a *App) recompute() {
 	a.dailyStats = pipeline.AggregateDays(filtered, since, now)
 	a.models = pipeline.AggregateModels(filtered, since, now)
 	a.projects = pipeline.AggregateProjects(filtered, since, now)
+	a.costByType, a.modelCosts = pipeline.AggregateCostBreakdown(filtered, since, now)
 
 	// Live activity charts
 	a.todayHourly = pipeline.AggregateTodayHourly(filtered)
@@ -234,6 +236,44 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case tea.MouseMsg:
+		if !a.loaded || a.showHelp || (a.needSetup && a.setupForm != nil) {
+			return a, nil
+		}
+
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			// Scroll up in sessions tab
+			if a.activeTab == 2 && !a.sessState.searching {
+				if a.sessState.cursor > 0 {
+					a.sessState.cursor--
+					a.sessState.detailScroll = 0
+				}
+			}
+			return a, nil
+
+		case tea.MouseButtonWheelDown:
+			// Scroll down in sessions tab
+			if a.activeTab == 2 && !a.sessState.searching {
+				searchFiltered := a.getSearchFilteredSessions()
+				if a.sessState.cursor < len(searchFiltered)-1 {
+					a.sessState.cursor++
+					a.sessState.detailScroll = 0
+				}
+			}
+			return a, nil
+
+		case tea.MouseButtonLeft:
+			// Check if click is in tab bar area (first 2 lines)
+			if msg.Y <= 1 {
+				if tab := a.tabAtX(msg.X); tab >= 0 && tab < len(components.Tabs) {
+					a.activeTab = tab
+				}
+			}
+			return a, nil
+		}
+		return a, nil
+
 	case tea.KeyMsg:
 		key := msg.String()
 
@@ -256,6 +296,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateSettingsInput(msg)
 		}
 
+		// Sessions search mode intercepts all keys when active
+		if a.activeTab == 2 && a.sessState.searching {
+			return a.updateSessionsSearch(msg)
+		}
+
 		// Help toggle
 		if key == "?" {
 			a.showHelp = !a.showHelp
@@ -271,7 +316,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Sessions tab has its own keybindings
 		if a.activeTab == 2 {
 			compactSessions := a.isCompactLayout()
+			searchFiltered := a.getSearchFilteredSessions()
+
 			switch key {
+			case "/":
+				// Start search mode
+				a.sessState.searching = true
+				a.sessState.searchInput = newSearchInput()
+				a.sessState.searchInput.Focus()
+				return a, a.sessState.searchInput.Cursor.BlinkCmd()
 			case "q":
 				if !compactSessions && a.sessState.viewMode == sessViewDetail {
 					a.sessState.viewMode = sessViewSplit
@@ -287,6 +340,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return a, nil
 			case "esc":
+				// Clear search if active, otherwise exit detail view
+				if a.sessState.searchQuery != "" {
+					a.sessState.searchQuery = ""
+					a.sessState.cursor = 0
+					a.sessState.offset = 0
+					return a, nil
+				}
 				if compactSessions {
 					return a, nil
 				}
@@ -295,7 +355,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return a, nil
 			case "j", "down":
-				if a.sessState.cursor < len(a.filtered)-1 {
+				if a.sessState.cursor < len(searchFiltered)-1 {
 					a.sessState.cursor++
 					a.sessState.detailScroll = 0
 				}
@@ -312,7 +372,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.sessState.detailScroll = 0
 				return a, nil
 			case "G":
-				a.sessState.cursor = len(a.filtered) - 1
+				a.sessState.cursor = len(searchFiltered) - 1
+				if a.sessState.cursor < 0 {
+					a.sessState.cursor = 0
+				}
 				a.sessState.detailScroll = 0
 				return a, nil
 			case "J":
@@ -631,11 +694,12 @@ func (a App) viewHelp() string {
 		{"o/c/s/b", "Overview / Costs / Sessions / Breakdown"},
 		{"x", "Settings"},
 		{"<- / ->", "Previous / Next tab"},
-		{"j / k", "Navigate lists"},
+		{"j / k", "Navigate lists (or mouse wheel)"},
 		{"J / K", "Scroll detail pane"},
 		{"^d / ^u", "Scroll detail half-page"},
+		{"/", "Search sessions (Enter apply, Esc cancel)"},
 		{"Enter / f", "Expand session full-screen"},
-		{"Esc", "Back to split view"},
+		{"Esc", "Clear search / Back to split view"},
 		{"r / R", "Refresh now / Toggle auto-refresh"},
 		{"?", "Toggle this help"},
 		{"q", "Quit (or back from full-screen)"},
@@ -692,7 +756,8 @@ func (a App) viewMain() string {
 	case 1:
 		content = a.renderCostsTab(cw)
 	case 2:
-		content = a.renderSessionsContent(a.filtered, cw, contentH)
+		searchFiltered := a.getSearchFilteredSessions()
+		content = a.renderSessionsContent(searchFiltered, cw, contentH)
 	case 3:
 		content = a.renderBreakdownTab(cw)
 	case 4:
@@ -970,4 +1035,66 @@ func fetchSubDataCmd(sessionKey string) tea.Cmd {
 		defer cancel()
 		return SubDataMsg{Data: client.FetchAll(ctx)}
 	}
+}
+
+// ─── Mouse Support ──────────────────────────────────────────────
+
+// tabAtX returns the tab index at the given X coordinate, or -1 if none.
+// Tab layout: " Overview  Costs  Sessions  Breakdown  Settings[x]"
+func (a App) tabAtX(x int) int {
+	// Tab bar format: " TabName  TabName  ..." with 2-space gaps
+	// We approximate positions since exact widths depend on styling.
+	// Each tab name is roughly: name length + optional [k] suffix + gap
+	positions := []struct {
+		start, end int
+	}{
+		{1, 12},  // Overview (0)
+		{14, 22}, // Costs (1)
+		{24, 35}, // Sessions (2)
+		{37, 50}, // Breakdown (3)
+		{52, 68}, // Settings (4)
+	}
+
+	for i, p := range positions {
+		if x >= p.start && x <= p.end {
+			return i
+		}
+	}
+	return -1
+}
+
+// ─── Session Search ─────────────────────────────────────────────
+
+// updateSessionsSearch handles key events while in search mode.
+func (a App) updateSessionsSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	switch key {
+	case "enter":
+		// Apply search and exit search mode
+		a.sessState.searchQuery = strings.TrimSpace(a.sessState.searchInput.Value())
+		a.sessState.searching = false
+		a.sessState.cursor = 0
+		a.sessState.offset = 0
+		a.sessState.detailScroll = 0
+		return a, nil
+
+	case "esc":
+		// Cancel search mode without applying
+		a.sessState.searching = false
+		return a, nil
+	}
+
+	// Forward other keys to the text input
+	var cmd tea.Cmd
+	a.sessState.searchInput, cmd = a.sessState.searchInput.Update(msg)
+	return a, cmd
+}
+
+// getSearchFilteredSessions returns sessions filtered by the current search query.
+func (a App) getSearchFilteredSessions() []model.SessionStats {
+	if a.sessState.searchQuery == "" {
+		return a.filtered
+	}
+	return filterSessionsBySearch(a.filtered, a.sessState.searchQuery)
 }
