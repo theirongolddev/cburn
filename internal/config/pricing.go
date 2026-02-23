@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // ModelPricing holds per-million-token prices for a model.
 type ModelPricing struct {
@@ -12,6 +15,11 @@ type ModelPricing struct {
 	// Long context overrides (>200K input tokens)
 	LongInputPerMTok  float64
 	LongOutputPerMTok float64
+}
+
+type modelPricingVersion struct {
+	EffectiveFrom time.Time
+	Pricing       ModelPricing
 }
 
 // DefaultPricing maps model base names to their pricing.
@@ -63,12 +71,34 @@ var DefaultPricing = map[string]ModelPricing{
 	},
 }
 
+// defaultPricingHistory stores effective-dated prices for each model.
+// Entries must be sorted by EffectiveFrom ascending.
+var defaultPricingHistory = makeDefaultPricingHistory(DefaultPricing)
+
+func makeDefaultPricingHistory(base map[string]ModelPricing) map[string][]modelPricingVersion {
+	history := make(map[string][]modelPricingVersion, len(base))
+	for modelName, pricing := range base {
+		history[modelName] = []modelPricingVersion{
+			{Pricing: pricing},
+		}
+	}
+	return history
+}
+
+func hasPricingModel(model string) bool {
+	if _, ok := defaultPricingHistory[model]; ok {
+		return true
+	}
+	_, ok := DefaultPricing[model]
+	return ok
+}
+
 // NormalizeModelName strips date suffixes from model identifiers.
 // e.g., "claude-opus-4-5-20251101" -> "claude-opus-4-5"
 func NormalizeModelName(raw string) string {
 	// Models can have date suffixes like -20251101 (8 digits)
 	// Strategy: try progressively shorter prefixes against the pricing table
-	if _, ok := DefaultPricing[raw]; ok {
+	if hasPricingModel(raw) {
 		return raw
 	}
 
@@ -78,7 +108,7 @@ func NormalizeModelName(raw string) string {
 		last := parts[len(parts)-1]
 		if isAllDigits(last) && len(last) >= 8 {
 			candidate := strings.Join(parts[:len(parts)-1], "-")
-			if _, ok := DefaultPricing[candidate]; ok {
+			if hasPricingModel(candidate) {
 				return candidate
 			}
 		}
@@ -99,14 +129,51 @@ func isAllDigits(s string) bool {
 // LookupPricing returns the pricing for a model, normalizing the name first.
 // Returns zero pricing and false if the model is unknown.
 func LookupPricing(model string) (ModelPricing, bool) {
+	return LookupPricingAt(model, time.Now())
+}
+
+// LookupPricingAt returns the pricing for a model at the given timestamp.
+// If at is zero, the latest known pricing entry is used.
+func LookupPricingAt(model string, at time.Time) (ModelPricing, bool) {
 	normalized := NormalizeModelName(model)
-	p, ok := DefaultPricing[normalized]
-	return p, ok
+	versions, ok := defaultPricingHistory[normalized]
+	if !ok || len(versions) == 0 {
+		p, fallback := DefaultPricing[normalized]
+		return p, fallback
+	}
+
+	if at.IsZero() {
+		return versions[len(versions)-1].Pricing, true
+	}
+
+	at = at.UTC()
+	selected := versions[0].Pricing
+	for _, v := range versions {
+		if v.EffectiveFrom.IsZero() || !at.Before(v.EffectiveFrom.UTC()) {
+			selected = v.Pricing
+			continue
+		}
+		break
+	}
+	return selected, true
 }
 
 // CalculateCost computes the estimated cost in USD for a single API call.
 func CalculateCost(model string, inputTokens, outputTokens, cache5m, cache1h, cacheRead int64) float64 {
-	pricing, ok := LookupPricing(model)
+	return CalculateCostAt(model, time.Now(), inputTokens, outputTokens, cache5m, cache1h, cacheRead)
+}
+
+// CalculateCostAt computes the estimated cost in USD for a single API call at a point in time.
+func CalculateCostAt(
+	model string,
+	at time.Time,
+	inputTokens,
+	outputTokens,
+	cache5m,
+	cache1h,
+	cacheRead int64,
+) float64 {
+	pricing, ok := LookupPricingAt(model, at)
 	if !ok {
 		return 0
 	}
@@ -124,7 +191,12 @@ func CalculateCost(model string, inputTokens, outputTokens, cache5m, cache1h, ca
 
 // CalculateCacheSavings computes how much the cache reads saved vs full input pricing.
 func CalculateCacheSavings(model string, cacheReadTokens int64) float64 {
-	pricing, ok := LookupPricing(model)
+	return CalculateCacheSavingsAt(model, time.Now(), cacheReadTokens)
+}
+
+// CalculateCacheSavingsAt computes how much cache reads saved at a point in time.
+func CalculateCacheSavingsAt(model string, at time.Time, cacheReadTokens int64) float64 {
+	pricing, ok := LookupPricingAt(model, at)
 	if !ok {
 		return 0
 	}
