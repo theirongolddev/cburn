@@ -70,6 +70,59 @@ func (a App) renderOverviewTab(cw int) string {
 		b.WriteString("\n")
 	}
 
+	// Row 2.5: Live Activity (Today + Last Hour)
+	liveHalves := components.LayoutRow(cw, 2)
+	liveChartH := 8
+	if a.isCompactLayout() {
+		liveChartH = 6
+	}
+
+	// Left: Today's hourly activity
+	var todayCard string
+	if len(a.todayHourly) > 0 {
+		hourVals := make([]float64, 24)
+		var todayTotal int64
+		for i, h := range a.todayHourly {
+			hourVals[i] = float64(h.Tokens)
+			todayTotal += h.Tokens
+		}
+		todayCard = components.ContentCard(
+			fmt.Sprintf("Today (%s)", cli.FormatTokens(todayTotal)),
+			components.BarChart(hourVals, hourLabels24(), t.Blue, components.CardInnerWidth(liveHalves[0]), liveChartH),
+			liveHalves[0],
+		)
+	}
+
+	// Right: Last hour's 5-minute activity
+	var lastHourCard string
+	if len(a.lastHour) > 0 {
+		minVals := make([]float64, 12)
+		var hourTotal int64
+		for i, m := range a.lastHour {
+			minVals[i] = float64(m.Tokens)
+			hourTotal += m.Tokens
+		}
+		lastHourCard = components.ContentCard(
+			fmt.Sprintf("Last Hour (%s)", cli.FormatTokens(hourTotal)),
+			components.BarChart(minVals, minuteLabels(), t.Accent, components.CardInnerWidth(liveHalves[1]), liveChartH),
+			liveHalves[1],
+		)
+	}
+
+	if a.isCompactLayout() {
+		if todayCard != "" {
+			b.WriteString(todayCard)
+			b.WriteString("\n")
+		}
+		if lastHourCard != "" {
+			b.WriteString(lastHourCard)
+			b.WriteString("\n")
+		}
+	} else {
+		b.WriteString(components.CardRow([]string{todayCard, lastHourCard}))
+		b.WriteString("\n")
+	}
+
 	// Row 3: Model Split + Activity Patterns
 	halves := components.LayoutRow(cw, 2)
 	innerW := components.CardInnerWidth(halves[0])
@@ -181,4 +234,27 @@ func (a App) renderOverviewTab(cw int) string {
 	}
 
 	return b.String()
+}
+
+// hourLabels24 returns X-axis labels for 24 hourly buckets (one per hour).
+func hourLabels24() []string {
+	labels := make([]string, 24)
+	for i := 0; i < 24; i++ {
+		h := i % 12
+		if h == 0 {
+			h = 12
+		}
+		suffix := "a"
+		if i >= 12 {
+			suffix = "p"
+		}
+		labels[i] = fmt.Sprintf("%d%s", h, suffix)
+	}
+	return labels
+}
+
+// minuteLabels returns X-axis labels for 12 five-minute buckets (one per bucket).
+// Bucket 0 is oldest (55-60 min ago), bucket 11 is newest (0-5 min ago).
+func minuteLabels() []string {
+	return []string{"-55", "-50", "-45", "-40", "-35", "-30", "-25", "-20", "-15", "-10", "-5", "now"}
 }
