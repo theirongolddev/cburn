@@ -1,4 +1,4 @@
-GO := /usr/local/go/bin/go
+GO ?= $(shell command -v go)
 BIN := cburn
 
 .PHONY: build install lint test test-race bench fuzz clean
