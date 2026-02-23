@@ -5,14 +5,28 @@ A CLI and TUI dashboard for analyzing Claude Code usage metrics. Parses JSONL se
 ## Installation
 
 ```bash
-# Build from source
-make build
+go install github.com/theirongolddev/cburn@latest
+```
 
-# Install to ~/go/bin
+Or build from source:
+
+```bash
+git clone https://github.com/theirongolddev/cburn.git
+cd cburn
 make install
 ```
 
 Requires Go 1.24+.
+
+**Note:** Ensure `~/go/bin` is in your PATH:
+
+```bash
+# bash/zsh: add to ~/.bashrc or ~/.zshrc
+export PATH="$HOME/go/bin:$PATH"
+
+# fish: add to ~/.config/fish/config.fish
+fish_add_path ~/go/bin
+```
 
 ## Quick Start
 
@@ -145,7 +159,7 @@ To get your session key:
 
 ## Caching
 
-Session data is cached in SQLite at `~/.cache/cburn/sessions.db`. The cache uses mtime-based diffing - unchanged files are not reparsed.
+Session data is cached in SQLite at `~/.cache/cburn/metrics_v2.db`. The cache uses mtime-based diffing - unchanged files are not reparsed.
 
 Force a full reparse with `--no-cache`.
 

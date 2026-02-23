@@ -66,7 +66,7 @@ Tests live alongside the code they test (`*_test.go`). The parser has both unit 
 
 - **Parsing strategy**: User/system entries use byte-level extraction for speed; only assistant entries get full JSON parse (they carry token/cost data).
 - **Deduplication**: Messages are keyed by message ID; the final state wins (handles edits/retries).
-- **Cache**: SQLite at `~/.cache/cburn/sessions.db`. Mtime+size diffing means unchanged files aren't reparsed.
+- **Cache**: SQLite at `~/.cache/cburn/metrics_v2.db`. Mtime+size diffing means unchanged files aren't reparsed.
 - **TUI async loading**: Data loads via goroutines posting `tea.Msg`; the UI remains responsive during parse.
 - **Pricing**: Hardcoded in `internal/config/pricing.go` with user overrides in config TOML. Model names are normalized (date suffixes stripped).
 
