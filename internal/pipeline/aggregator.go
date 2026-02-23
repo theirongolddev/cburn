@@ -271,3 +271,62 @@ func FilterByModel(sessions []model.SessionStats, modelFilter string) []model.Se
 func containsIgnoreCase(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
+
+// AggregateTodayHourly computes 24 hourly token buckets for today (local time).
+func AggregateTodayHourly(sessions []model.SessionStats) []model.HourlyStats {
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	todayEnd := todayStart.Add(24 * time.Hour)
+
+	hours := make([]model.HourlyStats, 24)
+	for i := range hours {
+		hours[i].Hour = i
+	}
+
+	for _, s := range sessions {
+		if s.StartTime.IsZero() {
+			continue
+		}
+		local := s.StartTime.Local()
+		if local.Before(todayStart) || !local.Before(todayEnd) {
+			continue
+		}
+		h := local.Hour()
+		hours[h].Prompts += s.UserMessages
+		hours[h].Sessions++
+		hours[h].Tokens += s.InputTokens + s.OutputTokens
+	}
+	return hours
+}
+
+// AggregateLastHour computes 12 five-minute token buckets for the last 60 minutes.
+func AggregateLastHour(sessions []model.SessionStats) []model.MinuteStats {
+	now := time.Now()
+	hourAgo := now.Add(-1 * time.Hour)
+
+	buckets := make([]model.MinuteStats, 12)
+	for i := range buckets {
+		buckets[i].Minute = i
+	}
+
+	for _, s := range sessions {
+		if s.StartTime.IsZero() {
+			continue
+		}
+		local := s.StartTime.Local()
+		if local.Before(hourAgo) || !local.Before(now) {
+			continue
+		}
+		// Compute which 5-minute bucket (0-11) this falls into
+		minutesAgo := int(now.Sub(local).Minutes())
+		bucketIdx := 11 - (minutesAgo / 5) // 11 = most recent, 0 = oldest
+		if bucketIdx < 0 {
+			bucketIdx = 0
+		}
+		if bucketIdx > 11 {
+			bucketIdx = 11
+		}
+		buckets[bucketIdx].Tokens += s.InputTokens + s.OutputTokens
+	}
+	return buckets
+}

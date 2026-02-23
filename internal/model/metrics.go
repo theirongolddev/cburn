@@ -92,3 +92,9 @@ type PeriodComparison struct {
 	Current  SummaryStats
 	Previous SummaryStats
 }
+
+// MinuteStats holds token counts for a 5-minute bucket.
+type MinuteStats struct {
+	Minute int // 0-11 (bucket index within the hour)
+	Tokens int64
+}
