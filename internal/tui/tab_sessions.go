@@ -11,6 +11,7 @@ import (
 	"cburn/internal/tui/components"
 	"cburn/internal/tui/theme"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -26,6 +27,49 @@ type sessionsState struct {
 	viewMode     int
 	offset       int // scroll offset for the list
 	detailScroll int // scroll offset for the detail pane
+
+	// Search/filter state
+	searching   bool            // true when search input is active
+	searchInput textinput.Model // the search text input
+	searchQuery string          // the applied search filter
+}
+
+// newSearchInput creates a configured text input for session search.
+func newSearchInput() textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = "search by project, cost, tokens..."
+	ti.CharLimit = 100
+	ti.Width = 40
+	return ti
+}
+
+// filterSessionsBySearch returns sessions matching the search query.
+// Matches against project name and formats cost/tokens for numeric searches.
+func filterSessionsBySearch(sessions []model.SessionStats, query string) []model.SessionStats {
+	if query == "" {
+		return sessions
+	}
+	query = strings.ToLower(query)
+	var result []model.SessionStats
+	for _, s := range sessions {
+		// Match project name
+		if strings.Contains(strings.ToLower(s.Project), query) {
+			result = append(result, s)
+			continue
+		}
+		// Match session ID prefix
+		if strings.Contains(strings.ToLower(s.SessionID), query) {
+			result = append(result, s)
+			continue
+		}
+		// Match cost (e.g., "$0.50" or "0.5")
+		costStr := cli.FormatCost(s.EstimatedCost)
+		if strings.Contains(strings.ToLower(costStr), query) {
+			result = append(result, s)
+			continue
+		}
+	}
+	return result
 }
 
 func (a App) renderSessionsContent(filtered []model.SessionStats, cw, h int) string {

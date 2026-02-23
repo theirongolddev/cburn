@@ -20,6 +20,7 @@ import (
 	"cburn/internal/tui/theme"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -150,6 +151,7 @@ func NewApp(claudeDir string, days int, project, modelFilter string, includeSuba
 // Init implements tea.Model.
 func (a App) Init() tea.Cmd {
 	cmds := []tea.Cmd{
+		tea.EnableMouseCellMotion, // Enable mouse support
 		loadDataCmd(a.claudeDir, a.includeSubagents, a.loadSub),
 		a.spinner.Tick,
 		tickCmd(),
