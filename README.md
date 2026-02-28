@@ -35,6 +35,7 @@ cburn              # Summary of usage metrics
 cburn tui          # Interactive dashboard
 cburn costs        # Cost breakdown by token type
 cburn status       # Claude.ai subscription status
+cburn daemon --detach   # Background usage daemon + local API
 ```
 
 ## CLI Commands
@@ -50,6 +51,7 @@ cburn status       # Claude.ai subscription status
 | `cburn models` | Model usage breakdown |
 | `cburn projects` | Project usage ranking |
 | `cburn status` | Claude.ai subscription status and rate limits |
+| `cburn daemon` | Background daemon with JSON/SSE usage API |
 | `cburn config` | Show current configuration |
 | `cburn setup` | Interactive first-time setup wizard |
 | `cburn tui` | Interactive dashboard |
@@ -73,6 +75,27 @@ cburn -n 7                      # Last 7 days
 cburn costs -p myproject        # Costs for a specific project
 cburn sessions -m opus          # Sessions using Opus models
 cburn daily --no-subagents      # Exclude spawned agents
+cburn daemon --detach           # Start daemon in background
+cburn daemon status             # Check daemon health and latest totals
+cburn daemon stop               # Stop daemon
+```
+
+## Daemon Mode
+
+`cburn daemon` runs a long-lived polling service that keeps usage snapshots warm and exposes local endpoints for downstream tools.
+
+Default endpoint: `http://127.0.0.1:8787`
+
+- `GET /healthz` - liveness probe
+- `GET /v1/status` - current aggregate snapshot and daemon runtime status
+- `GET /v1/events` - recent event buffer (JSON array)
+- `GET /v1/stream` - Server-Sent Events stream (`snapshot`, `usage_delta`)
+
+Example:
+
+```bash
+cburn daemon --detach --interval 10s
+curl -s http://127.0.0.1:8787/v1/status | jq
 ```
 
 ## TUI Dashboard
@@ -194,6 +217,7 @@ make clean       # Remove binary and test cache
 | `internal/store` | SQLite cache layer |
 | `internal/model` | Domain types |
 | `internal/config` | TOML config and pricing tables |
+| `internal/daemon` | Background polling daemon + local HTTP/SSE API |
 | `internal/cli` | Terminal formatting |
 | `internal/claudeai` | Claude.ai API client |
 | `internal/tui` | Bubble Tea dashboard |
