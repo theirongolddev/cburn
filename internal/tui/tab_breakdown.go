@@ -23,8 +23,18 @@ func (a App) renderModelsTab(cw int) string {
 		nameW = 14
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
+	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface).Bold(true)
+	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	costStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.Surface)
+	shareStyle := lipgloss.NewStyle().Foreground(t.Cyan).Background(t.Surface)
+
+	// Model colors for visual interest - pre-compute styles to avoid allocation in loops
+	modelColors := []lipgloss.Color{t.BlueBright, t.Cyan, t.Magenta, t.Yellow, t.Green}
+	nameStyles := make([]lipgloss.Style, len(modelColors))
+	for i, color := range modelColors {
+		nameStyles[i] = lipgloss.NewStyle().Foreground(color).Background(t.Surface)
+	}
 
 	var tableBody strings.Builder
 	if a.isCompactLayout() {
@@ -37,29 +47,30 @@ func (a App) renderModelsTab(cw int) string {
 		}
 		tableBody.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %8s %10s %6s", nameW, "Model", "Calls", "Cost", "Share")))
 		tableBody.WriteString("\n")
+		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+shareW+costW+callW+3)))
+		tableBody.WriteString("\n")
 
-		for _, ms := range models {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %8s %10s %5.1f%%",
-				nameW,
-				truncStr(shortModel(ms.Model), nameW),
-				cli.FormatNumber(int64(ms.APICalls)),
-				cli.FormatCost(ms.EstimatedCost),
-				ms.SharePercent)))
+		for i, ms := range models {
+			tableBody.WriteString(nameStyles[i%len(modelColors)].Render(fmt.Sprintf("%-*s", nameW, truncStr(shortModel(ms.Model), nameW))))
+			tableBody.WriteString(rowStyle.Render(fmt.Sprintf(" %8s", cli.FormatNumber(int64(ms.APICalls)))))
+			tableBody.WriteString(costStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(ms.EstimatedCost))))
+			tableBody.WriteString(shareStyle.Render(fmt.Sprintf(" %5.1f%%", ms.SharePercent)))
 			tableBody.WriteString("\n")
 		}
 	} else {
 		tableBody.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %8s %10s %10s %10s %6s", nameW, "Model", "Calls", "Input", "Output", "Cost", "Share")))
 		tableBody.WriteString("\n")
+		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", innerW)))
+		tableBody.WriteString("\n")
 
-		for _, ms := range models {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %8s %10s %10s %10s %5.1f%%",
-				nameW,
-				truncStr(shortModel(ms.Model), nameW),
+		for i, ms := range models {
+			tableBody.WriteString(nameStyles[i%len(modelColors)].Render(fmt.Sprintf("%-*s", nameW, truncStr(shortModel(ms.Model), nameW))))
+			tableBody.WriteString(rowStyle.Render(fmt.Sprintf(" %8s %10s %10s",
 				cli.FormatNumber(int64(ms.APICalls)),
 				cli.FormatTokens(ms.InputTokens),
-				cli.FormatTokens(ms.OutputTokens),
-				cli.FormatCost(ms.EstimatedCost),
-				ms.SharePercent)))
+				cli.FormatTokens(ms.OutputTokens))))
+			tableBody.WriteString(costStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(ms.EstimatedCost))))
+			tableBody.WriteString(shareStyle.Render(fmt.Sprintf(" %5.1f%%", ms.SharePercent)))
 			tableBody.WriteString("\n")
 		}
 	}
@@ -79,8 +90,11 @@ func (a App) renderProjectsTab(cw int) string {
 		nameW = 18
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
+	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface).Bold(true)
+	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	nameStyle := lipgloss.NewStyle().Foreground(t.Cyan).Background(t.Surface)
+	costStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.Surface)
 
 	var tableBody strings.Builder
 	if a.isCompactLayout() {
@@ -92,27 +106,28 @@ func (a App) renderProjectsTab(cw int) string {
 		}
 		tableBody.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %6s %10s", nameW, "Project", "Sess.", "Cost")))
 		tableBody.WriteString("\n")
+		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+costW+sessW+2)))
+		tableBody.WriteString("\n")
 
 		for _, ps := range projects {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %6d %10s",
-				nameW,
-				truncStr(ps.Project, nameW),
-				ps.Sessions,
-				cli.FormatCost(ps.EstimatedCost))))
+			tableBody.WriteString(nameStyle.Render(fmt.Sprintf("%-*s", nameW, truncStr(ps.Project, nameW))))
+			tableBody.WriteString(rowStyle.Render(fmt.Sprintf(" %6d", ps.Sessions)))
+			tableBody.WriteString(costStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(ps.EstimatedCost))))
 			tableBody.WriteString("\n")
 		}
 	} else {
 		tableBody.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %6s %8s %10s %10s", nameW, "Project", "Sess.", "Prompts", "Tokens", "Cost")))
 		tableBody.WriteString("\n")
+		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", innerW)))
+		tableBody.WriteString("\n")
 
 		for _, ps := range projects {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %6d %8s %10s %10s",
-				nameW,
-				truncStr(ps.Project, nameW),
+			tableBody.WriteString(nameStyle.Render(fmt.Sprintf("%-*s", nameW, truncStr(ps.Project, nameW))))
+			tableBody.WriteString(rowStyle.Render(fmt.Sprintf(" %6d %8s %10s",
 				ps.Sessions,
 				cli.FormatNumber(int64(ps.Prompts)),
-				cli.FormatTokens(ps.TotalTokens),
-				cli.FormatCost(ps.EstimatedCost))))
+				cli.FormatTokens(ps.TotalTokens))))
+			tableBody.WriteString(costStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(ps.EstimatedCost))))
 			tableBody.WriteString("\n")
 		}
 	}

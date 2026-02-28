@@ -51,11 +51,14 @@ func (a App) renderCostsTab(cw int) string {
 		nameW = 14
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
-	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
+	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface).Bold(true)
+	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	costValueStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.Surface)
+	modelNameStyle := lipgloss.NewStyle().Foreground(t.BlueBright).Background(t.Surface)
+	tokenCostStyle := lipgloss.NewStyle().Foreground(t.Cyan).Background(t.Surface)
+	spaceStyle := lipgloss.NewStyle().Background(t.Surface)
 
 	var tableBody strings.Builder
 	if a.isCompactLayout() {
@@ -70,10 +73,8 @@ func (a App) renderCostsTab(cw int) string {
 		tableBody.WriteString("\n")
 
 		for _, mc := range modelCosts {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %10s",
-				nameW,
-				truncStr(shortModel(mc.Model), nameW),
-				cli.FormatCost(mc.TotalCost))))
+			tableBody.WriteString(modelNameStyle.Render(fmt.Sprintf("%-*s", nameW, truncStr(shortModel(mc.Model), nameW))))
+			tableBody.WriteString(costValueStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(mc.TotalCost))))
 			tableBody.WriteString("\n")
 		}
 		tableBody.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+totalW+1)))
@@ -84,13 +85,12 @@ func (a App) renderCostsTab(cw int) string {
 		tableBody.WriteString("\n")
 
 		for _, mc := range modelCosts {
-			tableBody.WriteString(rowStyle.Render(fmt.Sprintf("%-*s %10s %10s %10s %10s",
-				nameW,
-				truncStr(shortModel(mc.Model), nameW),
+			tableBody.WriteString(modelNameStyle.Render(fmt.Sprintf("%-*s", nameW, truncStr(shortModel(mc.Model), nameW))))
+			tableBody.WriteString(tokenCostStyle.Render(fmt.Sprintf(" %10s %10s %10s",
 				cli.FormatCost(mc.InputCost),
 				cli.FormatCost(mc.OutputCost),
-				cli.FormatCost(mc.CacheCost),
-				cli.FormatCost(mc.TotalCost))))
+				cli.FormatCost(mc.CacheCost))))
+			tableBody.WriteString(costValueStyle.Render(fmt.Sprintf(" %10s", cli.FormatCost(mc.TotalCost))))
 			tableBody.WriteString("\n")
 		}
 
@@ -126,12 +126,16 @@ func (a App) renderCostsTab(cw int) string {
 
 		var body strings.Builder
 		body.WriteString(bar.ViewAs(pct))
-		fmt.Fprintf(&body, " %.0f%%\n", pct*100)
-		fmt.Fprintf(&body, "%s  %s / %s %s",
-			labelStyle.Render("Used"),
-			valueStyle.Render(fmt.Sprintf("$%.2f", ol.UsedCredits)),
-			valueStyle.Render(fmt.Sprintf("$%.2f", ol.MonthlyCreditLimit)),
-			labelStyle.Render(ol.Currency))
+		body.WriteString(spaceStyle.Render(" "))
+		body.WriteString(valueStyle.Render(fmt.Sprintf("%.0f%%", pct*100)))
+		body.WriteString("\n")
+		body.WriteString(labelStyle.Render("Used"))
+		body.WriteString(spaceStyle.Render("  "))
+		body.WriteString(valueStyle.Render(fmt.Sprintf("$%.2f", ol.UsedCredits)))
+		body.WriteString(spaceStyle.Render(" / "))
+		body.WriteString(valueStyle.Render(fmt.Sprintf("$%.2f", ol.MonthlyCreditLimit)))
+		body.WriteString(spaceStyle.Render(" "))
+		body.WriteString(labelStyle.Render(ol.Currency))
 
 		progressCard = components.ContentCard("Overage Spend", body.String(), halves[0])
 	} else {
@@ -159,12 +163,14 @@ func (a App) renderCostsTab(cw int) string {
 			return topDays[i].Date.After(topDays[j].Date)
 		})
 		for _, d := range topDays {
-			fmt.Fprintf(&spendBody, "%s  %s\n",
-				valueStyle.Render(d.Date.Format("Jan 02")),
-				lipgloss.NewStyle().Foreground(t.Green).Render(cli.FormatCost(d.EstimatedCost)))
+			spendBody.WriteString(valueStyle.Render(d.Date.Format("Jan 02")))
+			spendBody.WriteString(spaceStyle.Render("  "))
+			spendBody.WriteString(lipgloss.NewStyle().Foreground(t.Green).Background(t.Surface).Render(cli.FormatCost(d.EstimatedCost)))
+			spendBody.WriteString("\n")
 		}
 	} else {
-		spendBody.WriteString("No data\n")
+		spendBody.WriteString(labelStyle.Render("No data"))
+		spendBody.WriteString("\n")
 	}
 	spendCard := components.ContentCard("Top Spend Days", spendBody.String(), halves[1])
 
@@ -189,16 +195,21 @@ func (a App) renderCostsTab(cw int) string {
 		promptsPerSess = float64(stats.TotalPrompts) / float64(stats.TotalSessions)
 	}
 
-	effMetrics := []struct{ name, value string }{
-		{"Tokens/Prompt", cli.FormatTokens(tokPerPrompt)},
-		{"Output/Prompt", cli.FormatTokens(outPerPrompt)},
-		{"Prompts/Session", fmt.Sprintf("%.1f", promptsPerSess)},
-		{"Minutes/Day", fmt.Sprintf("%.0f", stats.MinutesPerDay)},
+	effMetrics := []struct {
+		name  string
+		value string
+		color lipgloss.Color
+	}{
+		{"Tokens/Prompt", cli.FormatTokens(tokPerPrompt), t.Cyan},
+		{"Output/Prompt", cli.FormatTokens(outPerPrompt), t.Cyan},
+		{"Prompts/Session", fmt.Sprintf("%.1f", promptsPerSess), t.Magenta},
+		{"Minutes/Day", fmt.Sprintf("%.0f", stats.MinutesPerDay), t.Yellow},
 	}
 
 	var effBody strings.Builder
 	for _, m := range effMetrics {
-		effBody.WriteString(rowStyle.Render(fmt.Sprintf("%-20s %10s", m.name, m.value)))
+		effBody.WriteString(labelStyle.Render(fmt.Sprintf("%-20s", m.name)))
+		effBody.WriteString(lipgloss.NewStyle().Foreground(m.color).Background(t.Surface).Render(fmt.Sprintf(" %10s", m.value)))
 		effBody.WriteString("\n")
 	}
 
@@ -210,11 +221,11 @@ func (a App) renderCostsTab(cw int) string {
 // renderSubscriptionCard renders the rate limit + overage card at the top of the costs tab.
 func (a App) renderSubscriptionCard(cw int) string {
 	t := theme.Active
-	hintStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+	hintStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 
 	// No session key configured
 	if a.subData == nil && !a.subFetching {
-		cfg, _ := config.Load()
+		cfg := loadConfigOrDefault()
 		if config.GetSessionKey(cfg) == "" {
 			return components.ContentCard("Subscription",
 				hintStyle.Render("Configure session key in Settings to see rate limits"),
@@ -235,7 +246,7 @@ func (a App) renderSubscriptionCard(cw int) string {
 
 	// Error with no usable data
 	if a.subData.Usage == nil && a.subData.Error != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(t.Orange)
+		warnStyle := lipgloss.NewStyle().Foreground(t.Orange).Background(t.Surface)
 		return components.ContentCard("Subscription",
 			warnStyle.Render(fmt.Sprintf("Error: %s", a.subData.Error)),
 			cw) + "\n"
@@ -285,12 +296,12 @@ func (a App) renderSubscriptionCard(cw int) string {
 	if ol := a.subData.Overage; ol != nil && ol.IsEnabled && ol.MonthlyCreditLimit > 0 {
 		pct := ol.UsedCredits / ol.MonthlyCreditLimit
 		body.WriteString("\n")
-		body.WriteString(lipgloss.NewStyle().Foreground(t.TextDim).Render(strings.Repeat("─", innerW)))
+		body.WriteString(lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface).Render(strings.Repeat("─", innerW)))
 		body.WriteString("\n")
 		body.WriteString(components.RateLimitBar("Overage",
 			pct, time.Time{}, labelW, barW))
 
-		spendStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+		spendStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 		body.WriteString(spendStyle.Render(
 			fmt.Sprintf("  $%.2f / $%.2f", ol.UsedCredits, ol.MonthlyCreditLimit)))
 	}
@@ -298,7 +309,7 @@ func (a App) renderSubscriptionCard(cw int) string {
 	// Fetch timestamp
 	if !a.subData.FetchedAt.IsZero() {
 		body.WriteString("\n")
-		tsStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+		tsStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 		body.WriteString(tsStyle.Render("Updated " + a.subData.FetchedAt.Format("3:04 PM")))
 	}
 

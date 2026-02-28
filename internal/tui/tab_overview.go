@@ -21,7 +21,7 @@ func (a App) renderOverviewTab(cw int) string {
 	models := a.models
 	var b strings.Builder
 
-	// Row 1: Metric cards
+	// Row 1: Metric cards with colored values
 	costDelta := ""
 	if prev.CostPerDay > 0 {
 		costDelta = fmt.Sprintf("%s/day (%s)", cli.FormatCost(stats.CostPerDay), cli.FormatDelta(stats.CostPerDay, prev.CostPerDay))
@@ -54,7 +54,7 @@ func (a App) renderOverviewTab(cw int) string {
 	b.WriteString(components.MetricCardRow(cards, cw))
 	b.WriteString("\n")
 
-	// Row 2: Daily token usage chart
+	// Row 2: Daily token usage chart - use PanelCard for emphasis
 	if len(days) > 0 {
 		chartVals := make([]float64, len(days))
 		chartLabels := chartDateLabels(days)
@@ -62,9 +62,9 @@ func (a App) renderOverviewTab(cw int) string {
 			chartVals[len(days)-1-i] = float64(d.InputTokens + d.OutputTokens + d.CacheCreation5m + d.CacheCreation1h)
 		}
 		chartInnerW := components.CardInnerWidth(cw)
-		b.WriteString(components.ContentCard(
+		b.WriteString(components.PanelCard(
 			fmt.Sprintf("Daily Token Usage (%dd)", a.days),
-			components.BarChart(chartVals, chartLabels, t.Blue, chartInnerW, 10),
+			components.BarChart(chartVals, chartLabels, t.BlueBright, chartInnerW, 10),
 			cw,
 		))
 		b.WriteString("\n")
@@ -88,7 +88,7 @@ func (a App) renderOverviewTab(cw int) string {
 		}
 		todayCard = components.ContentCard(
 			fmt.Sprintf("Today (%s)", cli.FormatTokens(todayTotal)),
-			components.BarChart(hourVals, hourLabels24(), t.Blue, components.CardInnerWidth(liveHalves[0]), liveChartH),
+			components.BarChart(hourVals, hourLabels24(), t.Cyan, components.CardInnerWidth(liveHalves[0]), liveChartH),
 			liveHalves[0],
 		)
 	}
@@ -104,7 +104,7 @@ func (a App) renderOverviewTab(cw int) string {
 		}
 		lastHourCard = components.ContentCard(
 			fmt.Sprintf("Last Hour (%s)", cli.FormatTokens(hourTotal)),
-			components.BarChart(minVals, minuteLabels(), t.Accent, components.CardInnerWidth(liveHalves[1]), liveChartH),
+			components.BarChart(minVals, minuteLabels(), t.Magenta, components.CardInnerWidth(liveHalves[1]), liveChartH),
 			liveHalves[1],
 		)
 	}
@@ -127,10 +127,7 @@ func (a App) renderOverviewTab(cw int) string {
 	halves := components.LayoutRow(cw, 2)
 	innerW := components.CardInnerWidth(halves[0])
 
-	nameStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
-	barStyle := lipgloss.NewStyle().Foreground(t.Accent)
-	pctStyle := lipgloss.NewStyle().Foreground(t.TextDim)
-
+	// Model split with colored bars per model
 	var modelBody strings.Builder
 	limit := 5
 	if len(models) < limit {
@@ -150,18 +147,36 @@ func (a App) renderOverviewTab(cw int) string {
 	if barMaxLen < 1 {
 		barMaxLen = 1
 	}
-	for _, ms := range models[:limit] {
+
+	// Color palette for models - pre-compute styles to avoid allocation in loop
+	modelColors := []lipgloss.Color{t.BlueBright, t.Cyan, t.Magenta, t.Yellow, t.Green}
+	sepStyle := lipgloss.NewStyle().Background(t.Surface)
+	nameStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+
+	// Pre-compute bar and percent styles for each color
+	barStyles := make([]lipgloss.Style, len(modelColors))
+	pctStyles := make([]lipgloss.Style, len(modelColors))
+	for i, color := range modelColors {
+		barStyles[i] = lipgloss.NewStyle().Foreground(color).Background(t.Surface)
+		pctStyles[i] = lipgloss.NewStyle().Foreground(color).Background(t.Surface).Bold(true)
+	}
+
+	for i, ms := range models[:limit] {
 		barLen := 0
 		if maxShare > 0 {
 			barLen = int(ms.SharePercent / maxShare * float64(barMaxLen))
 		}
-		fmt.Fprintf(&modelBody, "%s %s %s\n",
-			nameStyle.Render(fmt.Sprintf("%-*s", nameW, shortModel(ms.Model))),
-			barStyle.Render(strings.Repeat("█", barLen)),
-			pctStyle.Render(fmt.Sprintf("%.0f%%", ms.SharePercent)))
+
+		colorIdx := i % len(modelColors)
+		modelBody.WriteString(nameStyle.Render(fmt.Sprintf("%-*s", nameW, shortModel(ms.Model))))
+		modelBody.WriteString(sepStyle.Render(" "))
+		modelBody.WriteString(barStyles[colorIdx].Render(strings.Repeat("█", barLen)))
+		modelBody.WriteString(sepStyle.Render(" "))
+		modelBody.WriteString(pctStyles[colorIdx].Render(fmt.Sprintf("%3.0f%%", ms.SharePercent)))
+		modelBody.WriteString("\n")
 	}
 
-	// Compact activity: aggregate prompts into 4-hour buckets
+	// Activity patterns with time-of-day coloring
 	now := time.Now()
 	since := now.AddDate(0, 0, -a.days)
 	hours := pipeline.AggregateHourly(a.filtered, since, now)
@@ -172,11 +187,11 @@ func (a App) renderOverviewTab(cw int) string {
 		color lipgloss.Color
 	}
 	buckets := []actBucket{
-		{"Night   00-03", 0, t.Red},
-		{"Early   04-07", 0, t.Yellow},
-		{"Morning 08-11", 0, t.Green},
+		{"Night   00-03", 0, t.Magenta},
+		{"Early   04-07", 0, t.Orange},
+		{"Morning 08-11", 0, t.GreenBright},
 		{"Midday  12-15", 0, t.Green},
-		{"Evening 16-19", 0, t.Green},
+		{"Evening 16-19", 0, t.Cyan},
 		{"Late    20-23", 0, t.Yellow},
 	}
 	for _, h := range hours {
@@ -196,31 +211,34 @@ func (a App) renderOverviewTab(cw int) string {
 
 	actInnerW := components.CardInnerWidth(halves[1])
 
-	// Compute number column width from actual data so bars never overflow.
+	// Compute number column width
 	maxNumW := 5
 	for _, bk := range buckets {
 		if nw := len(cli.FormatNumber(int64(bk.total))); nw > maxNumW {
 			maxNumW = nw
 		}
 	}
-	// prefix = 13 (label) + 1 (space) + maxNumW (number) + 1 (space)
 	actBarMax := actInnerW - 15 - maxNumW
 	if actBarMax < 1 {
 		actBarMax = 1
 	}
 
-	numStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	numStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+
 	var actBody strings.Builder
 	for _, bk := range buckets {
 		bl := 0
 		if maxBucket > 0 {
 			bl = bk.total * actBarMax / maxBucket
 		}
-		bar := lipgloss.NewStyle().Foreground(bk.color).Render(strings.Repeat("█", bl))
-		fmt.Fprintf(&actBody, "%s %s %s\n",
-			numStyle.Render(bk.label),
-			numStyle.Render(fmt.Sprintf("%*s", maxNumW, cli.FormatNumber(int64(bk.total)))),
-			bar)
+		barStyle := lipgloss.NewStyle().Foreground(bk.color).Background(t.Surface)
+		actBody.WriteString(labelStyle.Render(bk.label))
+		actBody.WriteString(sepStyle.Render(" "))
+		actBody.WriteString(numStyle.Render(fmt.Sprintf("%*s", maxNumW, cli.FormatNumber(int64(bk.total)))))
+		actBody.WriteString(sepStyle.Render(" "))
+		actBody.WriteString(barStyle.Render(strings.Repeat("█", bl)))
+		actBody.WriteString("\n")
 	}
 
 	modelCard := components.ContentCard("Model Split", modelBody.String(), halves[0])
@@ -236,7 +254,7 @@ func (a App) renderOverviewTab(cw int) string {
 	return b.String()
 }
 
-// hourLabels24 returns X-axis labels for 24 hourly buckets (one per hour).
+// hourLabels24 returns X-axis labels for 24 hourly buckets.
 func hourLabels24() []string {
 	labels := make([]string, 24)
 	for i := 0; i < 24; i++ {
@@ -253,8 +271,7 @@ func hourLabels24() []string {
 	return labels
 }
 
-// minuteLabels returns X-axis labels for 12 five-minute buckets (one per bucket).
-// Bucket 0 is oldest (55-60 min ago), bucket 11 is newest (0-5 min ago).
+// minuteLabels returns X-axis labels for 12 five-minute buckets.
 func minuteLabels() []string {
 	return []string{"-55", "-50", "-45", "-40", "-35", "-30", "-25", "-20", "-15", "-10", "-5", "now"}
 }

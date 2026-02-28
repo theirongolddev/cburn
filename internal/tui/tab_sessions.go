@@ -21,6 +21,13 @@ const (
 	sessViewDetail        // Full-screen detail
 )
 
+// Layout constants for sessions tab height calculations.
+const (
+	sessListOverhead   = 6 // card border (2) + header row (2) + footer hint (2)
+	sessDetailOverhead = 4 // card border (2) + title (1) + gap (1)
+	sessMinVisible     = 5 // minimum visible rows in any pane
+)
+
 // sessionsState holds the sessions tab state.
 type sessionsState struct {
 	cursor       int
@@ -79,17 +86,21 @@ func (a App) renderSessionsContent(filtered []model.SessionStats, cw, h int) str
 	// Show search input when in search mode
 	if ss.searching {
 		var b strings.Builder
-		searchStyle := lipgloss.NewStyle().Foreground(t.Accent)
+		searchStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface).Bold(true)
+		spaceStyle := lipgloss.NewStyle().Background(t.Surface)
 		b.WriteString(searchStyle.Render("  Search: "))
 		b.WriteString(ss.searchInput.View())
 		b.WriteString("\n")
-		hintStyle := lipgloss.NewStyle().Foreground(t.TextDim)
-		b.WriteString(hintStyle.Render("  [Enter] apply  [Esc] cancel"))
+		hintStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
+		keyStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface)
+		b.WriteString(spaceStyle.Render("  ") + hintStyle.Render("[") + keyStyle.Render("Enter") + hintStyle.Render("] apply  [") +
+			keyStyle.Render("Esc") + hintStyle.Render("] cancel"))
 		b.WriteString("\n\n")
 
 		// Show preview of filtered results
 		previewFiltered := filterSessionsBySearch(a.filtered, ss.searchInput.Value())
-		b.WriteString(hintStyle.Render(fmt.Sprintf("  %d sessions match", len(previewFiltered))))
+		countStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+		b.WriteString(countStyle.Render(fmt.Sprintf("  %d sessions match", len(previewFiltered))))
 
 		return b.String()
 	}
@@ -102,10 +113,10 @@ func (a App) renderSessionsContent(filtered []model.SessionStats, cw, h int) str
 
 	if len(filtered) == 0 {
 		var body strings.Builder
-		body.WriteString(lipgloss.NewStyle().Foreground(t.TextMuted).Render("No sessions found"))
+		body.WriteString(lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface).Render("No sessions found"))
 		if ss.searchQuery != "" {
 			body.WriteString("\n\n")
-			body.WriteString(lipgloss.NewStyle().Foreground(t.TextDim).Render("[Esc] clear search  [/] new search"))
+			body.WriteString(lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface).Render("[Esc] clear search  [/] new search"))
 		}
 		return components.ContentCard(title, body.String(), cw)
 	}
@@ -157,15 +168,15 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 	// Left pane: condensed session list
 	leftInner := components.CardInnerWidth(leftW)
 
-	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
-	selectedStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface).Bold(true)
-	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
+	rowStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	selectedStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.SurfaceBright).Bold(true)
+	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	costStyle := lipgloss.NewStyle().Foreground(t.Green).Background(t.Surface)
 
 	var leftBody strings.Builder
-	visible := h - 6 // card border (2) + header row (2) + footer hint (2)
-	if visible < 5 {
-		visible = 5
+	visible := h - sessListOverhead
+	if visible < sessMinVisible {
+		visible = sessMinVisible
 	}
 
 	offset := ss.offset
@@ -198,18 +209,22 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 		}
 
 		if i == cursor {
-			fullLine := leftPart + strings.Repeat(" ", padN) + costStr
-			// Pad to full width for continuous highlight background
-			if len(fullLine) < leftInner {
-				fullLine += strings.Repeat(" ", leftInner-len(fullLine))
-			}
-			leftBody.WriteString(selectedStyle.Render(fullLine))
+			// Selected row with bright background and accent marker
+			selectedCostStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.SurfaceBright).Bold(true)
+			marker := lipgloss.NewStyle().Foreground(t.AccentBright).Background(t.SurfaceBright).Render("▸ ")
+			leftBody.WriteString(marker + selectedStyle.Render(leftPart) +
+				lipgloss.NewStyle().Background(t.SurfaceBright).Render(strings.Repeat(" ", max(1, padN-2))) +
+				selectedCostStyle.Render(costStr) +
+				lipgloss.NewStyle().Background(t.SurfaceBright).Render(strings.Repeat(" ", max(0, leftInner-len(leftPart)-padN-len(costStr)))))
 		} else {
+			// Normal row
 			leftBody.WriteString(
-				mutedStyle.Render(fmt.Sprintf("%-13s", startStr)) + " " +
+				lipgloss.NewStyle().Background(t.Surface).Render("  ") +
+					mutedStyle.Render(fmt.Sprintf("%-13s", startStr)) +
+					lipgloss.NewStyle().Background(t.Surface).Render(" ") +
 					rowStyle.Render(dur) +
-					strings.Repeat(" ", padN) +
-					mutedStyle.Render(costStr))
+					lipgloss.NewStyle().Background(t.Surface).Render(strings.Repeat(" ", padN-2)) +
+					costStyle.Render(costStr))
 		}
 		leftBody.WriteString("\n")
 	}
@@ -223,10 +238,10 @@ func (a App) renderSessionsSplit(sessions []model.SessionStats, cw, h int) strin
 
 	// Right pane: full session detail with scroll support
 	sel := sessions[cursor]
-	rightBody := a.renderDetailBody(sel, rightW, headerStyle, mutedStyle)
+	rightBody := a.renderDetailBody(sel, rightW, mutedStyle)
 
 	// Apply detail scroll offset
-	rightBody = a.applyDetailScroll(rightBody, h-4) // card border (2) + title (1) + gap (1)
+	rightBody = a.applyDetailScroll(rightBody, h-sessDetailOverhead)
 
 	titleStr := "Session " + shortID(sel.SessionID)
 	rightCard := components.ContentCard(titleStr, rightBody, rightW)
@@ -248,11 +263,10 @@ func (a App) renderSessionDetail(sessions []model.SessionStats, cw, h int) strin
 	}
 	sel := sessions[cursor]
 
-	headerStyle := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
-	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
+	mutedStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
 
-	body := a.renderDetailBody(sel, cw, headerStyle, mutedStyle)
-	body = a.applyDetailScroll(body, h-4)
+	body := a.renderDetailBody(sel, cw, mutedStyle)
+	body = a.applyDetailScroll(body, h-sessDetailOverhead)
 
 	title := "Session " + shortID(sel.SessionID)
 	return components.ContentCard(title, body, cw)
@@ -260,21 +274,28 @@ func (a App) renderSessionDetail(sessions []model.SessionStats, cw, h int) strin
 
 // renderDetailBody generates the full detail content for a session.
 // Used by both the split right pane and the full-screen detail view.
-func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedStyle lipgloss.Style) string {
+func (a App) renderDetailBody(sel model.SessionStats, w int, mutedStyle lipgloss.Style) string {
 	t := theme.Active
 	innerW := components.CardInnerWidth(w)
 
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
-	greenStyle := lipgloss.NewStyle().Foreground(t.Green)
+	// Rich color palette for different data types
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	tokenStyle := lipgloss.NewStyle().Foreground(t.Cyan).Background(t.Surface)
+	costStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.Surface)
+	savingsStyle := lipgloss.NewStyle().Foreground(t.Green).Background(t.Surface).Bold(true)
+	timeStyle := lipgloss.NewStyle().Foreground(t.Magenta).Background(t.Surface)
+	modelStyle := lipgloss.NewStyle().Foreground(t.BlueBright).Background(t.Surface)
+	accentStyle := lipgloss.NewStyle().Foreground(t.AccentBright).Background(t.Surface).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 
 	var body strings.Builder
-	body.WriteString(mutedStyle.Render(sel.Project))
+	body.WriteString(accentStyle.Render(sel.Project))
 	body.WriteString("\n")
-	body.WriteString(mutedStyle.Render(strings.Repeat("─", innerW)))
+	body.WriteString(dimStyle.Render(strings.Repeat("─", innerW)))
 	body.WriteString("\n\n")
 
-	// Duration line
+	// Duration line with colored values
 	if !sel.StartTime.IsZero() {
 		durStr := cli.FormatDuration(sel.DurationSecs)
 		timeStr := sel.StartTime.Local().Format("15:04:05")
@@ -282,28 +303,42 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 			timeStr += " - " + sel.EndTime.Local().Format("15:04:05")
 		}
 		timeStr += " " + sel.StartTime.Local().Format("MST")
-		fmt.Fprintf(&body, "%s %s (%s)\n",
-			labelStyle.Render("Duration:"),
-			valueStyle.Render(durStr),
-			mutedStyle.Render(timeStr))
+		body.WriteString(labelStyle.Render("Duration: "))
+		body.WriteString(timeStyle.Render(durStr))
+		body.WriteString(dimStyle.Render(" ("))
+		body.WriteString(mutedStyle.Render(timeStr))
+		body.WriteString(dimStyle.Render(")"))
+		body.WriteString("\n")
 	}
 
 	ratio := 0.0
 	if sel.UserMessages > 0 {
 		ratio = float64(sel.APICalls) / float64(sel.UserMessages)
 	}
-	fmt.Fprintf(&body, "%s %s    %s %s    %s %.1fx\n\n",
-		labelStyle.Render("Prompts:"), valueStyle.Render(cli.FormatNumber(int64(sel.UserMessages))),
-		labelStyle.Render("API Calls:"), valueStyle.Render(cli.FormatNumber(int64(sel.APICalls))),
-		labelStyle.Render("Ratio:"), ratio)
+	body.WriteString(labelStyle.Render("Prompts: "))
+	body.WriteString(valueStyle.Render(cli.FormatNumber(int64(sel.UserMessages))))
+	body.WriteString(dimStyle.Render("    "))
+	body.WriteString(labelStyle.Render("API Calls: "))
+	body.WriteString(tokenStyle.Render(cli.FormatNumber(int64(sel.APICalls))))
+	body.WriteString(dimStyle.Render("    "))
+	body.WriteString(labelStyle.Render("Ratio: "))
+	body.WriteString(accentStyle.Render(fmt.Sprintf("%.1fx", ratio)))
+	body.WriteString("\n\n")
 
-	// Token breakdown table
-	body.WriteString(headerStyle.Render("TOKEN BREAKDOWN"))
+	// Token breakdown table with section header
+	sectionStyle := lipgloss.NewStyle().Foreground(t.AccentBright).Background(t.Surface).Bold(true)
+	tableHeaderStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface)
+
+	body.WriteString(sectionStyle.Render("TOKEN BREAKDOWN"))
 	body.WriteString("\n")
 	typeW, tokW, costW, tableW := tokenTableLayout(innerW)
-	body.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %*s %*s", typeW, "Type", tokW, "Tokens", costW, "Cost")))
+	body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%-*s", typeW, "Type")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%*s", tokW, "Tokens")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%*s", costW, "Cost")))
 	body.WriteString("\n")
-	body.WriteString(mutedStyle.Render(strings.Repeat("─", tableW)))
+	body.WriteString(dimStyle.Render(strings.Repeat("─", tableW)))
 	body.WriteString("\n")
 
 	// Calculate per-type costs (aggregate across models)
@@ -342,37 +377,35 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 		if r.tokens == 0 {
 			continue
 		}
-		body.WriteString(valueStyle.Render(fmt.Sprintf("%-*s %*s %*s",
-			typeW,
-			truncStr(r.typ, typeW),
-			tokW,
-			cli.FormatTokens(r.tokens),
-			costW,
-			cli.FormatCost(r.cost))))
+		body.WriteString(labelStyle.Render(fmt.Sprintf("%-*s", typeW, truncStr(r.typ, typeW))))
+		body.WriteString(dimStyle.Render(" "))
+		body.WriteString(tokenStyle.Render(fmt.Sprintf("%*s", tokW, cli.FormatTokens(r.tokens))))
+		body.WriteString(dimStyle.Render(" "))
+		body.WriteString(costStyle.Render(fmt.Sprintf("%*s", costW, cli.FormatCost(r.cost))))
 		body.WriteString("\n")
 	}
 
-	body.WriteString(mutedStyle.Render(strings.Repeat("─", tableW)))
+	body.WriteString(dimStyle.Render(strings.Repeat("─", tableW)))
 	body.WriteString("\n")
-	fmt.Fprintf(&body, "%-*s %*s %*s\n",
-		typeW,
-		valueStyle.Render("Net Cost"),
-		tokW,
-		"",
-		costW,
-		greenStyle.Render(cli.FormatCost(sel.EstimatedCost)))
-	fmt.Fprintf(&body, "%-*s %*s %*s\n",
-		typeW,
-		labelStyle.Render("Cache Savings"),
-		tokW,
-		"",
-		costW,
-		greenStyle.Render(cli.FormatCost(savings)))
+	// Net Cost row - highlighted
+	body.WriteString(accentStyle.Render(fmt.Sprintf("%-*s", typeW, "Net Cost")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(dimStyle.Render(fmt.Sprintf("%*s", tokW, "")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(savingsStyle.Render(fmt.Sprintf("%*s", costW, cli.FormatCost(sel.EstimatedCost))))
+	body.WriteString("\n")
+	// Cache Savings row
+	body.WriteString(labelStyle.Render(fmt.Sprintf("%-*s", typeW, "Cache Savings")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(dimStyle.Render(fmt.Sprintf("%*s", tokW, "")))
+	body.WriteString(dimStyle.Render(" "))
+	body.WriteString(savingsStyle.Render(fmt.Sprintf("%*s", costW, cli.FormatCost(savings))))
+	body.WriteString("\n")
 
-	// Model breakdown
+	// Model breakdown with colored data
 	if len(sel.Models) > 0 {
 		body.WriteString("\n")
-		body.WriteString(headerStyle.Render("API CALLS BY MODEL"))
+		body.WriteString(sectionStyle.Render("API CALLS BY MODEL"))
 		body.WriteString("\n")
 		compactModelTable := innerW < 60
 		if compactModelTable {
@@ -380,14 +413,14 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 			if modelW < 8 {
 				modelW = 8
 			}
-			body.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %7s %8s", modelW, "Model", "Calls", "Cost")))
+			body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%-*s %7s %8s", modelW, "Model", "Calls", "Cost")))
 			body.WriteString("\n")
-			body.WriteString(mutedStyle.Render(strings.Repeat("─", modelW+7+8+2)))
+			body.WriteString(dimStyle.Render(strings.Repeat("─", modelW+7+8+2)))
 		} else {
 			modelW := 14
-			body.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %7s %10s %10s %8s", modelW, "Model", "Calls", "Input", "Output", "Cost")))
+			body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%-*s %7s %10s %10s %8s", modelW, "Model", "Calls", "Input", "Output", "Cost")))
 			body.WriteString("\n")
-			body.WriteString(mutedStyle.Render(strings.Repeat("─", modelW+7+10+10+8+4)))
+			body.WriteString(dimStyle.Render(strings.Repeat("─", modelW+7+10+10+8+4)))
 		}
 		body.WriteString("\n")
 
@@ -405,20 +438,22 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 				if modelW < 8 {
 					modelW = 8
 				}
-				body.WriteString(valueStyle.Render(fmt.Sprintf("%-*s %7s %8s",
-					modelW,
-					truncStr(shortModel(modelName), modelW),
-					cli.FormatNumber(int64(mu.APICalls)),
-					cli.FormatCost(mu.EstimatedCost))))
+				body.WriteString(modelStyle.Render(fmt.Sprintf("%-*s", modelW, truncStr(shortModel(modelName), modelW))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(valueStyle.Render(fmt.Sprintf("%7s", cli.FormatNumber(int64(mu.APICalls)))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(costStyle.Render(fmt.Sprintf("%8s", cli.FormatCost(mu.EstimatedCost))))
 			} else {
 				modelW := 14
-				body.WriteString(valueStyle.Render(fmt.Sprintf("%-*s %7s %10s %10s %8s",
-					modelW,
-					truncStr(shortModel(modelName), modelW),
-					cli.FormatNumber(int64(mu.APICalls)),
-					cli.FormatTokens(mu.InputTokens),
-					cli.FormatTokens(mu.OutputTokens),
-					cli.FormatCost(mu.EstimatedCost))))
+				body.WriteString(modelStyle.Render(fmt.Sprintf("%-*s", modelW, truncStr(shortModel(modelName), modelW))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(valueStyle.Render(fmt.Sprintf("%7s", cli.FormatNumber(int64(mu.APICalls)))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(tokenStyle.Render(fmt.Sprintf("%10s", cli.FormatTokens(mu.InputTokens))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(tokenStyle.Render(fmt.Sprintf("%10s", cli.FormatTokens(mu.OutputTokens))))
+				body.WriteString(dimStyle.Render(" "))
+				body.WriteString(costStyle.Render(fmt.Sprintf("%8s", cli.FormatCost(mu.EstimatedCost))))
 			}
 			body.WriteString("\n")
 		}
@@ -426,23 +461,23 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 
 	if sel.IsSubagent {
 		body.WriteString("\n")
-		body.WriteString(mutedStyle.Render("(subagent session)"))
+		body.WriteString(dimStyle.Render("(subagent session)"))
 		body.WriteString("\n")
 	}
 
-	// Subagent drill-down
+	// Subagent drill-down with colors
 	if subs := a.subagentMap[sel.SessionID]; len(subs) > 0 {
 		body.WriteString("\n")
-		body.WriteString(headerStyle.Render(fmt.Sprintf("SUBAGENTS (%d)", len(subs))))
+		body.WriteString(sectionStyle.Render(fmt.Sprintf("SUBAGENTS (%d)", len(subs))))
 		body.WriteString("\n")
 
 		nameW := innerW - 8 - 10 - 2
 		if nameW < 10 {
 			nameW = 10
 		}
-		body.WriteString(headerStyle.Render(fmt.Sprintf("%-*s %8s %10s", nameW, "Agent", "Duration", "Cost")))
+		body.WriteString(tableHeaderStyle.Render(fmt.Sprintf("%-*s %8s %10s", nameW, "Agent", "Duration", "Cost")))
 		body.WriteString("\n")
-		body.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+8+10+2)))
+		body.WriteString(dimStyle.Render(strings.Repeat("─", nameW+8+10+2)))
 		body.WriteString("\n")
 
 		var totalSubCost float64
@@ -455,31 +490,41 @@ func (a App) renderDetailBody(sel model.SessionStats, w int, headerStyle, mutedS
 			}
 			agentName = strings.TrimPrefix(agentName, "agent-")
 
-			body.WriteString(valueStyle.Render(fmt.Sprintf("%-*s %8s %10s",
-				nameW,
-				truncStr(agentName, nameW),
-				cli.FormatDuration(sub.DurationSecs),
-				cli.FormatCost(sub.EstimatedCost))))
+			body.WriteString(modelStyle.Render(fmt.Sprintf("%-*s", nameW, truncStr(agentName, nameW))))
+			body.WriteString(dimStyle.Render(" "))
+			body.WriteString(timeStyle.Render(fmt.Sprintf("%8s", cli.FormatDuration(sub.DurationSecs))))
+			body.WriteString(dimStyle.Render(" "))
+			body.WriteString(costStyle.Render(fmt.Sprintf("%10s", cli.FormatCost(sub.EstimatedCost))))
 			body.WriteString("\n")
 			totalSubCost += sub.EstimatedCost
 			totalSubDur += sub.DurationSecs
 		}
 
-		body.WriteString(mutedStyle.Render(strings.Repeat("─", nameW+8+10+2)))
+		body.WriteString(dimStyle.Render(strings.Repeat("─", nameW+8+10+2)))
 		body.WriteString("\n")
-		body.WriteString(valueStyle.Render(fmt.Sprintf("%-*s %8s %10s",
-			nameW,
-			"Combined",
-			cli.FormatDuration(totalSubDur),
-			cli.FormatCost(totalSubCost))))
+		body.WriteString(accentStyle.Render(fmt.Sprintf("%-*s", nameW, "Combined")))
+		body.WriteString(dimStyle.Render(" "))
+		body.WriteString(timeStyle.Render(fmt.Sprintf("%8s", cli.FormatDuration(totalSubDur))))
+		body.WriteString(dimStyle.Render(" "))
+		body.WriteString(savingsStyle.Render(fmt.Sprintf("%10s", cli.FormatCost(totalSubCost))))
 		body.WriteString("\n")
 	}
 
+	// Footer hints with styled keys
 	body.WriteString("\n")
+	hintKeyStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.Surface)
+	hintTextStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 	if w < compactWidth {
-		body.WriteString(mutedStyle.Render("[/] search  [j/k] navigate  [J/K] scroll  [q] quit"))
+		body.WriteString(hintTextStyle.Render("[") + hintKeyStyle.Render("/") + hintTextStyle.Render("] search  [") +
+			hintKeyStyle.Render("j/k") + hintTextStyle.Render("] navigate  [") +
+			hintKeyStyle.Render("J/K") + hintTextStyle.Render("] scroll  [") +
+			hintKeyStyle.Render("q") + hintTextStyle.Render("] quit"))
 	} else {
-		body.WriteString(mutedStyle.Render("[/] search  [Enter] expand  [j/k] navigate  [J/K/^d/^u] scroll  [q] quit"))
+		body.WriteString(hintTextStyle.Render("[") + hintKeyStyle.Render("/") + hintTextStyle.Render("] search  [") +
+			hintKeyStyle.Render("Enter") + hintTextStyle.Render("] expand  [") +
+			hintKeyStyle.Render("j/k") + hintTextStyle.Render("] navigate  [") +
+			hintKeyStyle.Render("J/K/^d/^u") + hintTextStyle.Render("] scroll  [") +
+			hintKeyStyle.Render("q") + hintTextStyle.Render("] quit"))
 	}
 
 	return body.String()
@@ -495,8 +540,8 @@ func shortID(id string) string {
 // applyDetailScroll applies the detail pane scroll offset to a rendered body string.
 // visibleH is the number of lines that fit in the card body area.
 func (a App) applyDetailScroll(body string, visibleH int) string {
-	if visibleH < 5 {
-		visibleH = 5
+	if visibleH < sessMinVisible {
+		visibleH = sessMinVisible
 	}
 
 	lines := strings.Split(body, "\n")
@@ -526,7 +571,7 @@ func (a App) applyDetailScroll(body string, visibleH int) string {
 	// Count includes the line we're replacing + lines past the viewport.
 	if endIdx < len(lines) {
 		unseen := len(lines) - endIdx + 1
-		dimStyle := lipgloss.NewStyle().Foreground(theme.Active.TextDim)
+		dimStyle := lipgloss.NewStyle().Foreground(theme.Active.TextDim).Background(theme.Active.Surface)
 		visible[len(visible)-1] = dimStyle.Render(fmt.Sprintf("... %d more", unseen))
 	}
 

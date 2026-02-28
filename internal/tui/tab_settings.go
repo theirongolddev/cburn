@@ -46,7 +46,7 @@ func newSettingsInput() textinput.Model {
 }
 
 func (a App) settingsStartEdit() (tea.Model, tea.Cmd) {
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 	a.settings.editing = true
 	a.settings.saved = false
 
@@ -123,7 +123,7 @@ func (a App) updateSettingsInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) settingsSave() {
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 	val := strings.TrimSpace(a.settings.input.Value())
 
 	switch a.settings.cursor {
@@ -176,13 +176,15 @@ func (a *App) settingsSave() {
 
 func (a App) renderSettingsTab(cw int) string {
 	t := theme.Active
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary)
-	selectedStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface).Bold(true)
-	accentStyle := lipgloss.NewStyle().Foreground(t.Accent)
-	greenStyle := lipgloss.NewStyle().Foreground(t.Green)
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	valueStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.Surface)
+	selectedStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Background(t.SurfaceBright).Bold(true)
+	selectedLabelStyle := lipgloss.NewStyle().Foreground(t.Accent).Background(t.SurfaceBright).Bold(true)
+	accentStyle := lipgloss.NewStyle().Foreground(t.AccentBright).Background(t.Surface)
+	greenStyle := lipgloss.NewStyle().Foreground(t.GreenBright).Background(t.Surface)
+	markerStyle := lipgloss.NewStyle().Foreground(t.AccentBright).Background(t.SurfaceBright)
 
 	type field struct {
 		label string
@@ -235,23 +237,39 @@ func (a App) renderSettingsTab(cw int) string {
 	for i, f := range fields {
 		// Show text input if currently editing this field
 		if a.settings.editing && i == a.settings.cursor {
-			formBody.WriteString(accentStyle.Render(fmt.Sprintf("> %-18s ", f.label)))
+			formBody.WriteString(markerStyle.Render("▸ "))
+			formBody.WriteString(accentStyle.Render(fmt.Sprintf("%-18s ", f.label)))
 			formBody.WriteString(a.settings.input.View())
 			formBody.WriteString("\n")
 			continue
 		}
 
-		line := fmt.Sprintf("%-20s %s", f.label+":", f.value)
 		if i == a.settings.cursor {
-			formBody.WriteString(selectedStyle.Render(line))
+			// Selected row with marker and highlight
+			marker := markerStyle.Render("▸ ")
+			label := selectedLabelStyle.Render(fmt.Sprintf("%-18s ", f.label+":"))
+			value := selectedStyle.Render(f.value)
+			formBody.WriteString(marker)
+			formBody.WriteString(label)
+			formBody.WriteString(value)
+			// Use lipgloss.Width() for correct visual width calculation
+			usedWidth := lipgloss.Width(marker) + lipgloss.Width(label) + lipgloss.Width(value)
+			innerW := components.CardInnerWidth(cw)
+			padLen := innerW - usedWidth
+			if padLen > 0 {
+				formBody.WriteString(lipgloss.NewStyle().Background(t.SurfaceBright).Render(strings.Repeat(" ", padLen)))
+			}
 		} else {
-			formBody.WriteString(labelStyle.Render(fmt.Sprintf("%-20s ", f.label+":")) + valueStyle.Render(f.value))
+			// Normal row
+			formBody.WriteString(lipgloss.NewStyle().Background(t.Surface).Render("  "))
+			formBody.WriteString(labelStyle.Render(fmt.Sprintf("%-18s ", f.label+":")))
+			formBody.WriteString(valueStyle.Render(f.value))
 		}
 		formBody.WriteString("\n")
 	}
 
 	if a.settings.saveErr != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(t.Orange)
+		warnStyle := lipgloss.NewStyle().Foreground(t.Orange).Background(t.Surface)
 		formBody.WriteString("\n")
 		formBody.WriteString(warnStyle.Render(fmt.Sprintf("Save failed: %s", a.settings.saveErr)))
 	} else if a.settings.saved {
