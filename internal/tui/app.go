@@ -118,7 +118,27 @@ const (
 	minTerminalWidth = 80
 	compactWidth     = 120
 	maxContentWidth  = 180
+
+	// Scroll navigation
+	scrollOverhead    = 10 // approximate header + status bar height for half-page calc
+	minHalfPageScroll = 1  // minimum lines for half-page scroll
+	minContentHeight  = 5  // minimum content area height
 )
+
+// loadConfigOrDefault loads config, returning defaults on error.
+// This ensures the TUI can always start even if config is corrupted.
+func loadConfigOrDefault() config.Config {
+	cfg, err := config.Load()
+	if err != nil {
+		// Return zero-value config with sensible defaults applied
+		return config.Config{
+			TUI: config.TUIConfig{
+				RefreshIntervalSec: 30,
+			},
+		}
+	}
+	return cfg
+}
 
 // NewApp creates a new TUI app model.
 func NewApp(claudeDir string, days int, project, modelFilter string, includeSubagents bool) App {
@@ -126,10 +146,10 @@ func NewApp(claudeDir string, days int, project, modelFilter string, includeSuba
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AA99F"))
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AA99F")).Background(theme.Active.Surface)
 
 	// Load refresh settings from config
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 	refreshInterval := time.Duration(cfg.TUI.RefreshIntervalSec) * time.Second
 	if refreshInterval < 10*time.Second {
 		refreshInterval = 30 * time.Second // minimum 10s, default 30s
@@ -159,7 +179,7 @@ func (a App) Init() tea.Cmd {
 	}
 
 	// Start subscription data fetch if session key is configured
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 	if sessionKey := config.GetSessionKey(cfg); sessionKey != "" {
 		cmds = append(cmds, fetchSubDataCmd(sessionKey))
 	}
@@ -387,16 +407,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return a, nil
 			case "ctrl+d":
-				halfPage := (a.height - 10) / 2
-				if halfPage < 1 {
-					halfPage = 1
+				halfPage := (a.height - scrollOverhead) / 2
+				if halfPage < minHalfPageScroll {
+					halfPage = minHalfPageScroll
 				}
 				a.sessState.detailScroll += halfPage
 				return a, nil
 			case "ctrl+u":
-				halfPage := (a.height - 10) / 2
-				if halfPage < 1 {
-					halfPage = 1
+				halfPage := (a.height - scrollOverhead) / 2
+				if halfPage < minHalfPageScroll {
+					halfPage = minHalfPageScroll
 				}
 				a.sessState.detailScroll -= halfPage
 				if a.sessState.detailScroll < 0 {
@@ -438,8 +458,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Toggle auto-refresh
 		if key == "R" {
 			a.autoRefresh = !a.autoRefresh
-			// Persist to config
-			cfg, _ := config.Load()
+			// Persist to config (best-effort, ignore errors)
+			cfg := loadConfigOrDefault()
 			cfg.TUI.AutoRefresh = a.autoRefresh
 			_ = config.Save(cfg)
 			return a, nil
@@ -491,9 +511,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.subData = msg.Data
 		a.subFetching = false
 
-		// Cache org ID if we got one
+		// Cache org ID if we got one (best-effort, ignore errors)
 		if msg.Data != nil && msg.Data.Org.UUID != "" {
-			cfg, _ := config.Load()
+			cfg := loadConfigOrDefault()
 			if cfg.ClaudeAI.OrgID != msg.Data.Org.UUID {
 				cfg.ClaudeAI.OrgID = msg.Data.Org.UUID
 				_ = config.Save(cfg)
@@ -517,7 +537,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Refresh subscription data every 5 minutes (1200 ticks at 250ms)
 		if a.loaded && !a.subFetching && a.subTicks >= 1200 {
 			a.subTicks = 0
-			cfg, _ := config.Load()
+			cfg := loadConfigOrDefault()
 			if sessionKey := config.GetSessionKey(cfg); sessionKey != "" {
 				a.subFetching = true
 				cmds = append(cmds, fetchSubDataCmd(sessionKey))
@@ -635,86 +655,143 @@ func (a App) viewLoading() string {
 	w := a.width
 	h := a.height
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(t.Accent).
+	// Polished loading card with accent border
+	cardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.BorderAccent).
+		Background(t.Surface).
+		Padding(2, 4)
+
+	// ASCII art logo effect
+	logoStyle := lipgloss.NewStyle().
+		Foreground(t.AccentBright).
+		Background(t.Surface).
 		Bold(true)
 
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(t.TextMuted)
+	subtitleStyle := lipgloss.NewStyle().
+		Foreground(t.TextMuted).
+		Background(t.Surface)
+
+	spinnerStyle := lipgloss.NewStyle().
+		Foreground(t.Accent).
+		Background(t.Surface)
+
+	countStyle := lipgloss.NewStyle().
+		Foreground(t.TextPrimary).
+		Background(t.Surface)
 
 	var b strings.Builder
-	b.WriteString("\n\n")
-	b.WriteString(titleStyle.Render("  cburn"))
-	b.WriteString(mutedStyle.Render(" - Claude Usage Metrics"))
+	b.WriteString(logoStyle.Render("◈ cburn"))
+	b.WriteString(subtitleStyle.Render(" · Claude Usage Metrics"))
 	b.WriteString("\n\n")
 
 	if a.progressMax > 0 {
-		barW := w - 20
+		barW := 40
+		if barW > w-30 {
+			barW = w - 30
+		}
 		if barW < 20 {
 			barW = 20
 		}
-		if barW > 60 {
-			barW = 60
-		}
 		pct := float64(a.progress) / float64(a.progressMax)
-		fmt.Fprintf(&b, "  %s Parsing sessions\n", a.spinner.View())
-		fmt.Fprintf(&b, "  %s  %s/%s\n",
-			components.ProgressBar(pct, barW),
-			cli.FormatNumber(int64(a.progress)),
-			cli.FormatNumber(int64(a.progressMax)))
+		b.WriteString(spinnerStyle.Render(a.spinner.View()))
+		b.WriteString(subtitleStyle.Render(" Parsing sessions\n\n"))
+		b.WriteString(components.ProgressBar(pct, barW))
+		b.WriteString("\n")
+		b.WriteString(countStyle.Render(cli.FormatNumber(int64(a.progress))))
+		b.WriteString(subtitleStyle.Render(" / "))
+		b.WriteString(countStyle.Render(cli.FormatNumber(int64(a.progressMax))))
 	} else {
-		fmt.Fprintf(&b, "  %s Scanning sessions\n", a.spinner.View())
+		b.WriteString(spinnerStyle.Render(a.spinner.View()))
+		b.WriteString(subtitleStyle.Render(" Discovering sessions..."))
 	}
 
-	content := b.String()
-	return padHeight(truncateHeight(content, h), h)
+	card := cardStyle.Render(b.String())
+
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, card,
+		lipgloss.WithWhitespaceBackground(t.Background))
 }
 
 func (a App) viewHelp() string {
 	t := theme.Active
 	h := a.height
+	w := a.width
+
+	// Polished help overlay with accent border
+	cardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.BorderAccent).
+		Background(t.Surface).
+		Padding(1, 3)
 
 	titleStyle := lipgloss.NewStyle().
+		Foreground(t.AccentBright).
+		Background(t.Surface).
+		Bold(true)
+
+	sectionStyle := lipgloss.NewStyle().
 		Foreground(t.Accent).
+		Background(t.Surface).
 		Bold(true)
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(t.TextPrimary).
+		Foreground(t.Cyan).
+		Background(t.Surface).
 		Bold(true)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(t.TextMuted)
+		Foreground(t.TextMuted).
+		Background(t.Surface)
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.Surface)
 
 	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(titleStyle.Render("  Keybindings"))
+	b.WriteString(titleStyle.Render("◈ Keyboard Shortcuts"))
 	b.WriteString("\n\n")
 
-	bindings := []struct{ key, desc string }{
-		{"o/c/s/b", "Overview / Costs / Sessions / Breakdown"},
-		{"x", "Settings"},
-		{"<- / ->", "Previous / Next tab"},
-		{"j / k", "Navigate lists (or mouse wheel)"},
-		{"J / K", "Scroll detail pane"},
-		{"^d / ^u", "Scroll detail half-page"},
-		{"/", "Search sessions (Enter apply, Esc cancel)"},
-		{"Enter / f", "Expand session full-screen"},
-		{"Esc", "Clear search / Back to split view"},
-		{"r / R", "Refresh now / Toggle auto-refresh"},
-		{"?", "Toggle this help"},
-		{"q", "Quit (or back from full-screen)"},
+	// Navigation section
+	b.WriteString(sectionStyle.Render("Navigation"))
+	b.WriteString("\n")
+	navBindings := []struct{ key, desc string }{
+		{"o c s b x", "Jump to tab"},
+		{"← →", "Previous / Next tab"},
+		{"j k", "Navigate lists"},
+		{"J K", "Scroll detail pane"},
+		{"^d ^u", "Half-page scroll"},
 	}
-
-	for _, bind := range bindings {
+	for _, bind := range navBindings {
 		fmt.Fprintf(&b, "  %s  %s\n",
-			keyStyle.Render(fmt.Sprintf("%-12s", bind.key)),
+			keyStyle.Render(fmt.Sprintf("%-10s", bind.key)),
 			descStyle.Render(bind.desc))
 	}
 
-	fmt.Fprintf(&b, "\n  %s\n", descStyle.Render("Press any key to close"))
+	b.WriteString("\n")
+	b.WriteString(sectionStyle.Render("Actions"))
+	b.WriteString("\n")
+	actionBindings := []struct{ key, desc string }{
+		{"/", "Search sessions"},
+		{"Enter", "Expand / Confirm"},
+		{"Esc", "Back / Cancel"},
+		{"r", "Refresh data"},
+		{"R", "Toggle auto-refresh"},
+		{"?", "Toggle help"},
+		{"q", "Quit"},
+	}
+	for _, bind := range actionBindings {
+		fmt.Fprintf(&b, "  %s  %s\n",
+			keyStyle.Render(fmt.Sprintf("%-10s", bind.key)),
+			descStyle.Render(bind.desc))
+	}
 
-	content := b.String()
-	return padHeight(truncateHeight(content, h), h)
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("Press any key to close"))
+
+	card := cardStyle.Render(b.String())
+
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, card,
+		lipgloss.WithWhitespaceBackground(t.Background))
 }
 
 func (a App) viewMain() string {
@@ -723,18 +800,33 @@ func (a App) viewMain() string {
 	cw := a.contentWidth()
 	h := a.height
 
-	// 1. Render header (tab bar + filter line)
-	filterStyle := lipgloss.NewStyle().Foreground(t.TextDim)
-	filterStr := fmt.Sprintf(" [%dd", a.days)
+	// 1. Render header (tab bar + filter pill)
+	filterPillStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.Surface)
+
+	filterAccentStyle := lipgloss.NewStyle().
+		Foreground(t.Accent).
+		Background(t.Surface).
+		Bold(true)
+
+	filterStr := filterPillStyle.Render(" ") +
+		filterAccentStyle.Render(fmt.Sprintf("%dd", a.days))
 	if a.project != "" {
-		filterStr += " | " + a.project
+		filterStr += filterPillStyle.Render(" │ ") + filterAccentStyle.Render(a.project)
 	}
 	if a.modelFilter != "" {
-		filterStr += " | " + a.modelFilter
+		filterStr += filterPillStyle.Render(" │ ") + filterAccentStyle.Render(a.modelFilter)
 	}
-	filterStr += "]"
-	header := components.RenderTabBar(a.activeTab, w) + "\n" +
-		filterStyle.Render(filterStr) + "\n"
+	filterStr += filterPillStyle.Render(" ")
+
+	// Pad filter line to full width
+	filterRowStyle := lipgloss.NewStyle().
+		Background(t.Surface).
+		Width(w)
+
+	header := components.RenderTabBar(a.activeTab, w) +
+		filterRowStyle.Render(filterStr)
 
 	// 2. Render status bar
 	dataAge := fmt.Sprintf("%.1fs", a.loadTime.Seconds())
@@ -744,8 +836,8 @@ func (a App) viewMain() string {
 	headerH := lipgloss.Height(header)
 	statusH := lipgloss.Height(statusBar)
 	contentH := h - headerH - statusH
-	if contentH < 5 {
-		contentH = 5
+	if contentH < minContentHeight {
+		contentH = minContentHeight
 	}
 
 	// 4. Render tab content (pass contentH to sessions)
@@ -767,13 +859,20 @@ func (a App) viewMain() string {
 	// 5. Truncate + pad to exactly contentH lines
 	content = padHeight(truncateHeight(content, contentH), contentH)
 
-	// 6. Center horizontally if terminal wider than content cap
-	if w > cw {
-		content = lipgloss.Place(w, contentH, lipgloss.Center, lipgloss.Top, content)
-	}
+	// 6. Fill each line to full width with background (fixes gaps between cards)
+	content = fillLinesWithBackground(content, cw, t.Background)
 
-	// 7. Stack vertically
-	return lipgloss.JoinVertical(lipgloss.Left, header, content, statusBar)
+	// 7. Place content with background fill (handles centering when w > cw)
+	content = lipgloss.Place(w, contentH, lipgloss.Center, lipgloss.Top, content,
+		lipgloss.WithWhitespaceBackground(t.Background))
+
+	// 8. Stack vertically
+	output := lipgloss.JoinVertical(lipgloss.Left, header, content, statusBar)
+
+	// 9. Ensure entire terminal is filled with background
+	// This handles any edge cases where the calculated heights don't perfectly match
+	return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top, output,
+		lipgloss.WithWhitespaceBackground(t.Background))
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -1021,6 +1120,25 @@ func padHeight(s string, h int) string {
 	return s + padding
 }
 
+// fillLinesWithBackground pads each line to width w with background color.
+// This ensures gaps between cards and empty lines have proper background fill.
+func fillLinesWithBackground(s string, w int, bg lipgloss.Color) string {
+	lines := strings.Split(s, "\n")
+
+	var result strings.Builder
+	for i, line := range lines {
+		// Use PlaceHorizontal to ensure proper width and background fill
+		// This is more reliable than just Background().Render(spaces)
+		placed := lipgloss.PlaceHorizontal(w, lipgloss.Left, line,
+			lipgloss.WithWhitespaceBackground(bg))
+		result.WriteString(placed)
+		if i < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+	return result.String()
+}
+
 // fetchSubDataCmd fetches subscription data from claude.ai in a background goroutine.
 func fetchSubDataCmd(sessionKey string) tea.Cmd {
 	return func() tea.Msg {
@@ -1040,24 +1158,22 @@ func fetchSubDataCmd(sessionKey string) tea.Cmd {
 // ─── Mouse Support ──────────────────────────────────────────────
 
 // tabAtX returns the tab index at the given X coordinate, or -1 if none.
-// Tab layout: " Overview  Costs  Sessions  Breakdown  Settings[x]"
+// Hitboxes are derived from the same width rules used by RenderTabBar.
 func (a App) tabAtX(x int) int {
-	// Tab bar format: " TabName  TabName  ..." with 2-space gaps
-	// We approximate positions since exact widths depend on styling.
-	// Each tab name is roughly: name length + optional [k] suffix + gap
-	positions := []struct {
-		start, end int
-	}{
-		{1, 12},  // Overview (0)
-		{14, 22}, // Costs (1)
-		{24, 35}, // Sessions (2)
-		{37, 50}, // Breakdown (3)
-		{52, 68}, // Settings (4)
-	}
+	pos := 0
+	for i, tab := range components.Tabs {
+		// Must match RenderTabBar's visual width calculation exactly.
+		// Use lipgloss.Width() to handle unicode and styled text correctly.
+		tabW := components.TabVisualWidth(tab, i == a.activeTab)
 
-	for i, p := range positions {
-		if x >= p.start && x <= p.end {
+		if x >= pos && x < pos+tabW {
 			return i
+		}
+		pos += tabW
+
+		// Separator is one column between tabs.
+		if i < len(components.Tabs)-1 {
+			pos++
 		}
 	}
 	return -1

@@ -19,7 +19,7 @@ type setupValues struct {
 
 // newSetupForm builds the huh form for first-run configuration.
 func newSetupForm(numSessions int, claudeDir string, vals *setupValues) *huh.Form {
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 
 	// Pre-populate defaults
 	vals.days = cfg.General.DefaultDays
@@ -98,7 +98,7 @@ func newSetupForm(numSessions int, claudeDir string, vals *setupValues) *huh.For
 
 // saveSetupConfig persists the setup wizard values to the config file.
 func (a *App) saveSetupConfig() error {
-	cfg, _ := config.Load()
+	cfg := loadConfigOrDefault()
 
 	if a.setupVals.sessionKey != "" {
 		cfg.ClaudeAI.SessionKey = a.setupVals.sessionKey
