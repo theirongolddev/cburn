@@ -24,50 +24,113 @@ var Tabs = []Tab{
 	{Name: "Settings", Key: 'x', KeyPos: -1},
 }
 
-// RenderTabBar renders the tab bar with the given active index.
+// TabVisualWidth returns the rendered visual width of a tab.
+// This must match RenderTabBar's rendering logic exactly for mouse hit detection.
+func TabVisualWidth(tab Tab, isActive bool) int {
+	// Active tabs: just the name with padding (1 on each side)
+	if isActive {
+		return len(tab.Name) + 2
+	}
+
+	// Inactive tabs: name with padding, plus "[k]" suffix if shortcut not in name
+	w := len(tab.Name) + 2
+	if tab.KeyPos < 0 {
+		w += 3 // "[k]"
+	}
+	return w
+}
+
+// RenderTabBar renders a modern tab bar with underline-style active indicator.
 func RenderTabBar(activeIdx int, width int) string {
 	t := theme.Active
 
-	activeStyle := lipgloss.NewStyle().
-		Foreground(t.Accent).
-		Bold(true)
+	// Container with bottom border
+	barStyle := lipgloss.NewStyle().
+		Background(t.Surface).
+		Width(width)
 
-	inactiveStyle := lipgloss.NewStyle().
-		Foreground(t.TextMuted)
+	// Active tab: bright text with accent underline
+	activeTabStyle := lipgloss.NewStyle().
+		Foreground(t.AccentBright).
+		Background(t.Surface).
+		Bold(true).
+		Padding(0, 1)
 
+	// Inactive tab: muted text
+	inactiveTabStyle := lipgloss.NewStyle().
+		Foreground(t.TextMuted).
+		Background(t.Surface).
+		Padding(0, 1)
+
+	// Key highlight style
 	keyStyle := lipgloss.NewStyle().
 		Foreground(t.Accent).
-		Bold(true)
+		Background(t.Surface)
 
-	dimKeyStyle := lipgloss.NewStyle().
-		Foreground(t.TextDim)
+	dimStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.Surface)
 
-	parts := make([]string, 0, len(Tabs))
+	// Separator between tabs
+	sepStyle := lipgloss.NewStyle().
+		Foreground(t.Border).
+		Background(t.Surface)
+
+	var tabParts []string
+	var underlineParts []string
+
 	for i, tab := range Tabs {
-		var rendered string
+		var tabContent string
+		var underline string
+
 		if i == activeIdx {
-			rendered = activeStyle.Render(tab.Name)
+			// Active tab - full name, bright
+			tabContent = activeTabStyle.Render(tab.Name)
+			// Accent underline
+			underline = lipgloss.NewStyle().
+				Foreground(t.AccentBright).
+				Background(t.Surface).
+				Render(strings.Repeat("━", lipgloss.Width(tabContent)))
 		} else {
-			// Render with highlighted shortcut key
+			// Inactive tab - show key hint
 			if tab.KeyPos >= 0 && tab.KeyPos < len(tab.Name) {
 				before := tab.Name[:tab.KeyPos]
 				key := string(tab.Name[tab.KeyPos])
 				after := tab.Name[tab.KeyPos+1:]
-				rendered = inactiveStyle.Render(before) +
-					dimKeyStyle.Render("[") + keyStyle.Render(key) + dimKeyStyle.Render("]") +
-					inactiveStyle.Render(after)
+				tabContent = lipgloss.NewStyle().Padding(0, 1).Background(t.Surface).Render(
+					dimStyle.Render(before) + keyStyle.Render(key) + dimStyle.Render(after))
 			} else {
-				// Key not in name (e.g., "Settings" with 'x')
-				rendered = inactiveStyle.Render(tab.Name) +
-					dimKeyStyle.Render("[") + keyStyle.Render(string(tab.Key)) + dimKeyStyle.Render("]")
+				tabContent = inactiveTabStyle.Render(tab.Name) +
+					dimStyle.Render("[") + keyStyle.Render(string(tab.Key)) + dimStyle.Render("]")
 			}
+			// Dim underline
+			underline = lipgloss.NewStyle().
+				Foreground(t.Border).
+				Background(t.Surface).
+				Render(strings.Repeat("─", lipgloss.Width(tabContent)))
 		}
-		parts = append(parts, rendered)
+
+		tabParts = append(tabParts, tabContent)
+		underlineParts = append(underlineParts, underline)
+
+		// Add separator between tabs (not after last)
+		if i < len(Tabs)-1 {
+			tabParts = append(tabParts, sepStyle.Render(" "))
+			underlineParts = append(underlineParts, sepStyle.Render(" "))
+		}
 	}
 
-	bar := " " + strings.Join(parts, "  ")
-	if lipgloss.Width(bar) <= width {
-		return bar
+	// Combine tab row and underline row
+	tabRow := strings.Join(tabParts, "")
+	underlineRow := strings.Join(underlineParts, "")
+
+	// Fill remaining width with border
+	tabRowWidth := lipgloss.Width(tabRow)
+	if tabRowWidth < width {
+		padding := width - tabRowWidth
+		tabRow += lipgloss.NewStyle().Background(t.Surface).Render(strings.Repeat(" ", padding))
+		underlineRow += lipgloss.NewStyle().Foreground(t.Border).Background(t.Surface).Render(strings.Repeat("─", padding))
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(bar)
+
+	return barStyle.Render(tabRow + "\n" + underlineRow)
 }

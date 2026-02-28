@@ -15,6 +15,7 @@ func Sparkline(values []float64, color lipgloss.Color) string {
 	if len(values) == 0 {
 		return ""
 	}
+	t := theme.Active
 
 	blocks := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
@@ -28,7 +29,7 @@ func Sparkline(values []float64, color lipgloss.Color) string {
 		peak = 1
 	}
 
-	style := lipgloss.NewStyle().Foreground(color)
+	style := lipgloss.NewStyle().Foreground(color).Background(t.Surface)
 
 	var buf strings.Builder
 	buf.Grow(len(values) * 4) // UTF-8 block chars are up to 3 bytes
@@ -46,9 +47,7 @@ func Sparkline(values []float64, color lipgloss.Color) string {
 	return style.Render(buf.String())
 }
 
-// BarChart renders a multi-row bar chart with anchored Y-axis and optional X-axis labels.
-// labels (if non-nil) should correspond 1:1 with values for x-axis display.
-// height is a target; actual height adjusts slightly so Y-axis ticks are evenly spaced.
+// BarChart renders a visually polished bar chart with gradient-style coloring.
 func BarChart(values []float64, labels []string, color lipgloss.Color, width, height int) string {
 	if len(values) == 0 {
 		return ""
@@ -70,10 +69,7 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 		maxVal = 1
 	}
 
-	// Y-axis: compute tick step and ceiling, then fit within requested height.
-	// Each interval needs at least 2 rows for readable spacing, so
-	// maxIntervals = height/2. If the initial step gives too many intervals,
-	// double it until they fit.
+	// Y-axis: compute tick step and ceiling
 	tickStep := chartTickStep(maxVal)
 	maxIntervals := height / 2
 	if maxIntervals < 2 {
@@ -92,14 +88,13 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 		numIntervals = 1
 	}
 
-	// Each interval gets the same number of rows; chart height is an exact multiple.
 	rowsPerTick := height / numIntervals
 	if rowsPerTick < 2 {
 		rowsPerTick = 2
 	}
 	chartH := rowsPerTick * numIntervals
 
-	// Pre-compute tick labels at evenly-spaced row positions
+	// Pre-compute tick labels
 	yLabelW := len(formatChartLabel(ceiling)) + 1
 	if yLabelW < 4 {
 		yLabelW = 4
@@ -110,7 +105,7 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 		tickLabels[row] = formatChartLabel(tickStep * float64(i))
 	}
 
-	// Chart area width (excluding y-axis label and axis line char)
+	// Chart area width
 	chartW := width - yLabelW - 1
 	if chartW < 5 {
 		chartW = 5
@@ -118,8 +113,7 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 
 	n := len(values)
 
-	// Bar sizing: always use 1-char gaps, target barW >= 2.
-	// If bars don't fit at width 2, subsample to fewer bars.
+	// Bar sizing
 	gap := 1
 	if n <= 1 {
 		gap = 0
@@ -131,8 +125,7 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 		barW = chartW
 	}
 	if barW < 2 && n > 1 {
-		// Subsample so bars fit at width 2 with 1-char gaps
-		maxN := (chartW + 1) / 3 // each bar = 2 chars + 1 gap (last bar no gap)
+		maxN := (chartW + 1) / 3
 		if maxN < 2 {
 			maxN = 2
 		}
@@ -159,15 +152,29 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 	axisLen := n*barW + max(0, n-1)*gap
 
 	blocks := []rune{' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-	barStyle := lipgloss.NewStyle().Foreground(color)
-	axisStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+
+	// Multi-color gradient for bars based on height
+	axisStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
 
 	var b strings.Builder
 
-	// Render rows top to bottom using chartH (aligned to tick intervals)
+	// Render rows top to bottom
 	for row := chartH; row >= 1; row-- {
 		rowTop := ceiling * float64(row) / float64(chartH)
 		rowBottom := ceiling * float64(row-1) / float64(chartH)
+		rowPct := float64(row) / float64(chartH) // How high in the chart (0=bottom, 1=top)
+
+		// Choose bar color based on row height (gradient effect)
+		var barColor lipgloss.Color
+		switch {
+		case rowPct > 0.8:
+			barColor = t.AccentBright
+		case rowPct > 0.5:
+			barColor = color
+		default:
+			barColor = t.Accent
+		}
+		barStyle := lipgloss.NewStyle().Foreground(barColor).Background(t.Surface)
 
 		label := tickLabels[row]
 		b.WriteString(axisStyle.Render(fmt.Sprintf("%*s", yLabelW, label)))
@@ -175,11 +182,11 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 
 		for i, v := range values {
 			if i > 0 && gap > 0 {
-				b.WriteString(strings.Repeat(" ", gap))
+				b.WriteString(lipgloss.NewStyle().Background(t.Surface).Render(strings.Repeat(" ", gap)))
 			}
 			switch {
 			case v >= rowTop:
-				b.WriteString(barStyle.Render(strings.Repeat("\u2588", barW)))
+				b.WriteString(barStyle.Render(strings.Repeat("█", barW)))
 			case v > rowBottom:
 				frac := (v - rowBottom) / (rowTop - rowBottom)
 				idx := int(frac * 8)
@@ -191,7 +198,7 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 				}
 				b.WriteString(barStyle.Render(strings.Repeat(string(blocks[idx]), barW)))
 			default:
-				b.WriteString(strings.Repeat(" ", barW))
+				b.WriteString(lipgloss.NewStyle().Background(t.Surface).Render(strings.Repeat(" ", barW)))
 			}
 		}
 		b.WriteString("\n")
@@ -209,7 +216,6 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 			buf[i] = ' '
 		}
 
-		// Place labels at bar start positions, skip overlaps
 		minSpacing := 8
 		labelStep := max(1, (n*minSpacing)/(axisLen+1))
 
@@ -231,14 +237,11 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 			copy(buf[pos:end], lbl)
 			lastEnd = end + 1
 		}
-		// Always attempt the last label (the loop may skip it due to labelStep).
-		// Right-align to axis edge if it would overflow.
 		if n > 1 {
 			lbl := labels[n-1]
 			pos := (n - 1) * (barW + gap)
 			end := pos + len(lbl)
 			if end > axisLen {
-				// Right-align: shift left so it ends at the axis edge
 				pos = axisLen - len(lbl)
 				end = axisLen
 			}
@@ -251,8 +254,9 @@ func BarChart(values []float64, labels []string, color lipgloss.Color, width, he
 		}
 
 		b.WriteString("\n")
-		b.WriteString(strings.Repeat(" ", yLabelW+1))
-		b.WriteString(axisStyle.Render(strings.TrimRight(string(buf), " ")))
+		labelStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
+		b.WriteString(lipgloss.NewStyle().Background(t.Surface).Render(strings.Repeat(" ", yLabelW+1)))
+		b.WriteString(labelStyle.Render(strings.TrimRight(string(buf), " ")))
 	}
 
 	return b.String()

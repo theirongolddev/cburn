@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ProgressBar renders a colored progress bar.
+// ProgressBar renders a visually appealing progress bar with percentage.
 func ProgressBar(pct float64, width int) string {
 	t := theme.Active
 	filled := int(pct * float64(width))
@@ -22,36 +22,45 @@ func ProgressBar(pct float64, width int) string {
 		filled = 0
 	}
 
-	filledStyle := lipgloss.NewStyle().Foreground(t.Accent)
-	emptyStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+	// Color gradient based on progress
+	var barColor lipgloss.Color
+	switch {
+	case pct >= 0.8:
+		barColor = t.AccentBright
+	case pct >= 0.5:
+		barColor = t.Accent
+	default:
+		barColor = t.Cyan
+	}
+
+	filledStyle := lipgloss.NewStyle().Foreground(barColor).Background(t.Surface)
+	emptyStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
+	pctStyle := lipgloss.NewStyle().Foreground(barColor).Background(t.Surface).Bold(true)
+	spaceStyle := lipgloss.NewStyle().Background(t.Surface)
 
 	var b strings.Builder
-	for i := 0; i < filled; i++ {
-		b.WriteString(filledStyle.Render("\u2588"))
-	}
-	for i := filled; i < width; i++ {
-		b.WriteString(emptyStyle.Render("\u2591"))
-	}
+	b.WriteString(filledStyle.Render(strings.Repeat("█", filled)))
+	b.WriteString(emptyStyle.Render(strings.Repeat("░", width-filled)))
 
-	return fmt.Sprintf("%s %.1f%%", b.String(), pct*100)
+	return b.String() + spaceStyle.Render(" ") + pctStyle.Render(fmt.Sprintf("%.0f%%", pct*100))
 }
 
-// ColorForPct returns green/yellow/red based on utilization level.
+// ColorForPct returns green/yellow/orange/red based on utilization level.
 func ColorForPct(pct float64) string {
 	t := theme.Active
 	switch {
-	case pct >= 0.8:
+	case pct >= 0.9:
 		return string(t.Red)
-	case pct >= 0.5:
+	case pct >= 0.7:
 		return string(t.Orange)
+	case pct >= 0.5:
+		return string(t.Yellow)
 	default:
 		return string(t.Green)
 	}
 }
 
 // RateLimitBar renders a labeled progress bar with percentage and countdown.
-// label: "5-hour", "Weekly", etc.  pct: 0.0-1.0.  resetsAt: zero means no countdown.
-// barWidth: width allocated for the progress bar portion only.
 func RateLimitBar(label string, pct float64, resetsAt time.Time, labelW, barWidth int) string {
 	t := theme.Active
 
@@ -69,9 +78,10 @@ func RateLimitBar(label string, pct float64, resetsAt time.Time, labelW, barWidt
 	)
 	bar.EmptyColor = string(t.TextDim)
 
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	pctStyle := lipgloss.NewStyle().Foreground(t.TextPrimary).Bold(true)
-	countdownStyle := lipgloss.NewStyle().Foreground(t.TextDim)
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	pctStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorForPct(pct))).Background(t.Surface).Bold(true)
+	countdownStyle := lipgloss.NewStyle().Foreground(t.TextDim).Background(t.Surface)
+	spaceStyle := lipgloss.NewStyle().Background(t.Surface)
 
 	pctStr := fmt.Sprintf("%3.0f%%", pct*100)
 	countdown := ""
@@ -84,16 +94,16 @@ func RateLimitBar(label string, pct float64, resetsAt time.Time, labelW, barWidt
 		}
 	}
 
-	return fmt.Sprintf("%s %s %s  %s",
-		labelStyle.Render(fmt.Sprintf("%-*s", labelW, label)),
-		bar.ViewAs(pct),
-		pctStyle.Render(pctStr),
-		countdownStyle.Render(countdown),
-	)
+	return labelStyle.Render(fmt.Sprintf("%-*s", labelW, label)) +
+		spaceStyle.Render(" ") +
+		bar.ViewAs(pct) +
+		spaceStyle.Render(" ") +
+		pctStyle.Render(pctStr) +
+		spaceStyle.Render("  ") +
+		countdownStyle.Render(countdown)
 }
 
 // CompactRateBar renders a tiny status-bar-sized rate indicator.
-// Example output: "5h ████░░░░ 42%"
 func CompactRateBar(label string, pct float64, width int) string {
 	t := theme.Active
 
@@ -104,7 +114,6 @@ func CompactRateBar(label string, pct float64, width int) string {
 		pct = 1
 	}
 
-	// label + space + bar + space + pct(4 chars)
 	barW := width - lipgloss.Width(label) - 6
 	if barW < 4 {
 		barW = 4
@@ -117,14 +126,15 @@ func CompactRateBar(label string, pct float64, width int) string {
 	)
 	bar.EmptyColor = string(t.TextDim)
 
-	pctStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorForPct(pct)))
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
+	pctStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorForPct(pct))).Background(t.Surface).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted).Background(t.Surface)
+	spaceStyle := lipgloss.NewStyle().Background(t.Surface)
 
-	return fmt.Sprintf("%s %s %s",
-		labelStyle.Render(label),
-		bar.ViewAs(pct),
-		pctStyle.Render(fmt.Sprintf("%2.0f%%", pct*100)),
-	)
+	return labelStyle.Render(label) +
+		spaceStyle.Render(" ") +
+		bar.ViewAs(pct) +
+		spaceStyle.Render(" ") +
+		pctStyle.Render(fmt.Sprintf("%2.0f%%", pct*100))
 }
 
 func formatCountdown(d time.Duration) string {

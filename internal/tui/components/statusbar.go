@@ -7,80 +7,119 @@ import (
 	"github.com/theirongolddev/cburn/internal/claudeai"
 	"github.com/theirongolddev/cburn/internal/tui/theme"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// RenderStatusBar renders the bottom status bar with optional rate limit indicators.
+// RenderStatusBar renders a polished bottom status bar with rate limits and controls.
 func RenderStatusBar(width int, dataAge string, subData *claudeai.SubscriptionData, refreshing, autoRefresh bool) string {
 	t := theme.Active
 
-	style := lipgloss.NewStyle().
-		Foreground(t.TextMuted).
+	// Main container
+	barStyle := lipgloss.NewStyle().
+		Background(t.SurfaceHover).
 		Width(width)
 
-	left := " [?]help  [r]efresh  [q]uit"
+	// Build left section: keyboard hints
+	keyStyle := lipgloss.NewStyle().
+		Foreground(t.AccentBright).
+		Background(t.SurfaceHover).
+		Bold(true)
 
-	// Build rate limit indicators for the middle section
-	ratePart := renderStatusRateLimits(subData)
+	hintStyle := lipgloss.NewStyle().
+		Foreground(t.TextMuted).
+		Background(t.SurfaceHover)
 
-	// Build right side with refresh status
+	bracketStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.SurfaceHover)
+	spaceStyle := lipgloss.NewStyle().
+		Background(t.SurfaceHover)
+
+	left := spaceStyle.Render(" ") +
+		bracketStyle.Render("[") + keyStyle.Render("?") + bracketStyle.Render("]") + hintStyle.Render("help") + spaceStyle.Render("  ") +
+		bracketStyle.Render("[") + keyStyle.Render("r") + bracketStyle.Render("]") + hintStyle.Render("efresh") + spaceStyle.Render("  ") +
+		bracketStyle.Render("[") + keyStyle.Render("q") + bracketStyle.Render("]") + hintStyle.Render("uit")
+
+	// Build middle section: rate limit indicators
+	middle := renderStatusRateLimits(subData)
+
+	// Build right section: refresh status
 	var right string
 	if refreshing {
-		refreshStyle := lipgloss.NewStyle().Foreground(t.Accent)
-		right = refreshStyle.Render("↻ refreshing ")
+		spinnerStyle := lipgloss.NewStyle().
+			Foreground(t.AccentBright).
+			Background(t.SurfaceHover).
+			Bold(true)
+		right = spinnerStyle.Render("↻ refreshing")
 	} else if dataAge != "" {
-		autoStr := ""
+		refreshIcon := ""
 		if autoRefresh {
-			autoStr = "↻ "
+			refreshIcon = lipgloss.NewStyle().
+				Foreground(t.Green).
+				Background(t.SurfaceHover).
+				Render("↻ ")
 		}
-		right = fmt.Sprintf("%sData: %s ", autoStr, dataAge)
+		dataStyle := lipgloss.NewStyle().
+			Foreground(t.TextMuted).
+			Background(t.SurfaceHover)
+		right = refreshIcon + dataStyle.Render("Data: "+dataAge)
 	}
+	right += spaceStyle.Render(" ")
 
-	// Layout: left + ratePart + right, with padding distributed
-	usedWidth := lipgloss.Width(left) + lipgloss.Width(ratePart) + lipgloss.Width(right)
-	padding := width - usedWidth
+	// Calculate padding
+	leftWidth := lipgloss.Width(left)
+	middleWidth := lipgloss.Width(middle)
+	rightWidth := lipgloss.Width(right)
+
+	totalUsed := leftWidth + middleWidth + rightWidth
+	padding := width - totalUsed
 	if padding < 0 {
 		padding = 0
 	}
 
-	// Split padding: more on the left side of rate indicators
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 
-	bar := left + strings.Repeat(" ", leftPad) + ratePart + strings.Repeat(" ", rightPad) + right
+	paddingStyle := lipgloss.NewStyle().Background(t.SurfaceHover)
+	bar := left +
+		paddingStyle.Render(strings.Repeat(" ", leftPad)) +
+		middle +
+		paddingStyle.Render(strings.Repeat(" ", rightPad)) +
+		right
 
-	return style.Render(bar)
+	return barStyle.Render(bar)
 }
 
-// renderStatusRateLimits renders compact rate limit bars for the status bar.
+// renderStatusRateLimits renders compact rate limit pills for the status bar.
 func renderStatusRateLimits(subData *claudeai.SubscriptionData) string {
 	if subData == nil || subData.Usage == nil {
 		return ""
 	}
 
 	t := theme.Active
-	sepStyle := lipgloss.NewStyle().Foreground(t.TextDim)
 
 	var parts []string
 
 	if w := subData.Usage.FiveHour; w != nil {
-		parts = append(parts, compactStatusBar("5h", w.Pct))
+		parts = append(parts, renderRatePill("5h", w.Pct))
 	}
 	if w := subData.Usage.SevenDay; w != nil {
-		parts = append(parts, compactStatusBar("Wk", w.Pct))
+		parts = append(parts, renderRatePill("Wk", w.Pct))
 	}
 
 	if len(parts) == 0 {
 		return ""
 	}
 
-	return strings.Join(parts, sepStyle.Render(" | "))
+	sepStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.SurfaceHover)
+
+	return strings.Join(parts, sepStyle.Render(" │ "))
 }
 
-// compactStatusBar renders a tiny inline progress indicator for the status bar.
-// Format: "5h ████░░░░ 42%"
-func compactStatusBar(label string, pct float64) string {
+// renderRatePill renders a compact, colored rate indicator pill.
+func renderRatePill(label string, pct float64) string {
 	t := theme.Active
 
 	if pct < 0 {
@@ -90,20 +129,52 @@ func compactStatusBar(label string, pct float64) string {
 		pct = 1
 	}
 
+	// Choose color based on usage level
+	var barColor, pctColor lipgloss.Color
+	switch {
+	case pct >= 0.9:
+		barColor = t.Red
+		pctColor = t.Red
+	case pct >= 0.7:
+		barColor = t.Orange
+		pctColor = t.Orange
+	case pct >= 0.5:
+		barColor = t.Yellow
+		pctColor = t.Yellow
+	default:
+		barColor = t.Green
+		pctColor = t.Green
+	}
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(t.TextMuted).
+		Background(t.SurfaceHover)
+
+	barStyle := lipgloss.NewStyle().
+		Foreground(barColor).
+		Background(t.SurfaceHover)
+
+	emptyStyle := lipgloss.NewStyle().
+		Foreground(t.TextDim).
+		Background(t.SurfaceHover)
+
+	pctStyle := lipgloss.NewStyle().
+		Foreground(pctColor).
+		Background(t.SurfaceHover).
+		Bold(true)
+
+	// Render mini bar (8 chars)
 	barW := 8
-	bar := progress.New(
-		progress.WithSolidFill(ColorForPct(pct)),
-		progress.WithWidth(barW),
-		progress.WithoutPercentage(),
-	)
-	bar.EmptyColor = string(t.TextDim)
+	filled := int(pct * float64(barW))
+	if filled > barW {
+		filled = barW
+	}
 
-	labelStyle := lipgloss.NewStyle().Foreground(t.TextMuted)
-	pctStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorForPct(pct)))
+	bar := barStyle.Render(strings.Repeat("█", filled)) +
+		emptyStyle.Render(strings.Repeat("░", barW-filled))
 
-	return fmt.Sprintf("%s %s %s",
-		labelStyle.Render(label),
-		bar.ViewAs(pct),
-		pctStyle.Render(fmt.Sprintf("%2.0f%%", pct*100)),
-	)
+	spaceStyle := lipgloss.NewStyle().
+		Background(t.SurfaceHover)
+
+	return labelStyle.Render(label+" ") + bar + spaceStyle.Render(" ") + pctStyle.Render(fmt.Sprintf("%2.0f%%", pct*100))
 }
